@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { toggleUpvote } from '@/lib/db/community';
 
 export async function POST(request: Request) {
@@ -8,8 +9,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
     }
 
-    const { itemType, itemId } = body as { itemType: 'post' | 'answer'; itemId: string };
-    if (!['post', 'answer'].includes(itemType) || !itemId) {
+    const { itemType, itemId } = body as { itemType?: unknown; itemId?: unknown };
+    if ((itemType !== 'post' && itemType !== 'answer') || typeof itemId !== 'string' || !itemId.trim()) {
       return NextResponse.json({ error: 'itemType and itemId are required' }, { status: 400 });
     }
 
@@ -17,9 +18,6 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (err) {
     console.error('Error toggling upvote:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to upvote' },
-      { status: 401 },
-    );
+    return apiErrorResponse(err, 'Failed to upvote');
   }
 }

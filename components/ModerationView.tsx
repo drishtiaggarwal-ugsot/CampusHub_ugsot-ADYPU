@@ -132,7 +132,12 @@ export default function ModerationView({ initialReports, initialLogs }: Props) {
       : 'Unsuspend this student and restore posting privileges?';
     if (!confirm(confirmMsg)) return;
 
-    const reason = isSuspended ? prompt('Reason for suspension:', 'Repeated violations of community guidelines') : undefined;
+    let reason: string | undefined;
+    if (isSuspended) {
+      const promptResult = prompt('Reason for suspension:', 'Repeated violations of community guidelines');
+      if (promptResult === null) return;
+      reason = promptResult.trim() || 'Repeated violations of community guidelines';
+    }
 
     setActionLoading(`suspend-${reportId}`);
     try {
@@ -342,8 +347,9 @@ export default function ModerationView({ initialReports, initialLogs }: Props) {
 
                     <button
                       type="button"
-                      disabled={loading}
-                      onClick={() => handleWarnUser(r.id, r.reporterId)}
+                      disabled={loading || !r.targetAuthorId}
+                      onClick={() => r.targetAuthorId && handleWarnUser(r.id, r.targetAuthorId)}
+                      title={r.targetAuthorId ? 'Warn content author' : 'Author not found'}
                       style={{
                         padding: '6px 12px',
                         backgroundColor: '#FEF08A',
@@ -352,7 +358,8 @@ export default function ModerationView({ initialReports, initialLogs }: Props) {
                         borderRadius: 4,
                         fontSize: 12,
                         fontWeight: 700,
-                        cursor: 'pointer',
+                        cursor: r.targetAuthorId ? 'pointer' : 'not-allowed',
+                        opacity: r.targetAuthorId ? 1 : 0.5,
                       }}
                     >
                       ⚠️ Issue Warning to Author
@@ -360,8 +367,9 @@ export default function ModerationView({ initialReports, initialLogs }: Props) {
 
                     <button
                       type="button"
-                      disabled={loading}
-                      onClick={() => handleSuspendUser(r.id, r.reporterId, true)}
+                      disabled={loading || !r.targetAuthorId}
+                      onClick={() => r.targetAuthorId && handleSuspendUser(r.id, r.targetAuthorId, true)}
+                      title={r.targetAuthorId ? 'Suspend content author' : 'Author not found'}
                       style={{
                         padding: '6px 12px',
                         backgroundColor: '#111',
@@ -370,7 +378,8 @@ export default function ModerationView({ initialReports, initialLogs }: Props) {
                         borderRadius: 4,
                         fontSize: 12,
                         fontWeight: 700,
-                        cursor: 'pointer',
+                        cursor: r.targetAuthorId ? 'pointer' : 'not-allowed',
+                        opacity: r.targetAuthorId ? 1 : 0.5,
                       }}
                     >
                       ⛔ Suspend Author

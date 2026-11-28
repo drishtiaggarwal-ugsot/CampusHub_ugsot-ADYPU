@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { claimCodeReview, resolveCodeReview, submitReviewFeedback } from '@/lib/db/mentorship';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -12,7 +13,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (action === 'claim') {
       await claimCodeReview(id);
     } else if (action === 'feedback') {
-      if (!feedback || !feedback.trim()) {
+      if (typeof feedback !== 'string' || !feedback.trim()) {
         return NextResponse.json({ error: 'Feedback text is required' }, { status: 400 });
       }
       await submitReviewFeedback(id, feedback);
@@ -25,9 +26,6 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('Error updating review:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to update review' },
-      { status: 403 },
-    );
+    return apiErrorResponse(err, 'Failed to update review');
   }
 }

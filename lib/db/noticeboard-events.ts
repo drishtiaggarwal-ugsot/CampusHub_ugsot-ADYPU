@@ -2,45 +2,31 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import type { Database } from '@/lib/db/database.types';
 import { getCurrentUser } from '@/lib/auth';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createDbClient } from '@/lib/db/client';
 import { todayISO } from '@/lib/dates';
 import {
+  EVENT_CATEGORIES,
   EVENT_LOCATIONS,
   EVENT_MODES,
-  PUBLISHABLE_EVENT_CATEGORIES,
-  type PublishableEventCategory,
+  type EventCategory,
   type EventMode,
+  type EventType,
   type EventWhere,
   type NoticeboardCampusEvent,
   type NoticeboardEventInput,
 } from '@/lib/types';
 
 type EventCatalogRow = Database['public']['Tables']['event_catalog']['Row'];
-type EventCatalogListingRow = Pick<
-  EventCatalogRow,
-  | 'id'
-  | 'title'
-  | 'category'
-  | 'description'
-  | 'mode'
-  | 'event_where'
-  | 'place'
-  | 'start_date'
-  | 'end_date'
-  | 'registration_deadline'
-  | 'capacity'
-  | 'is_published'
->;
 
 const EVENT_FIELDS =
-  'id,title,category,description,mode,event_where,place,start_date,end_date,registration_deadline,capacity,is_published';
+  'id,title,category,description,mode,event_where,place,start_date,end_date,registration_deadline,capacity,is_published,event_type,image_url,team_size_min,team_size_max,theme,prize,rules';
 
-const publishableEventCategories = new Set<string>(PUBLISHABLE_EVENT_CATEGORIES);
+const eventCategories = new Set<string>(EVENT_CATEGORIES);
 const eventModes = new Set<string>(EVENT_MODES);
 const eventLocations = new Set<string>(EVENT_LOCATIONS);
 
-function isEventCategory(value: unknown): value is PublishableEventCategory {
-  return typeof value === 'string' && publishableEventCategories.has(value);
+function isEventCategory(value: unknown): value is EventCategory {
+  return typeof value === 'string' && eventCategories.has(value);
 }
 
 function isEventMode(value: unknown): value is EventMode {
@@ -51,6 +37,16 @@ function isEventLocation(value: unknown): value is EventWhere {
   return typeof value === 'string' && eventLocations.has(value);
 }
 
+function isValidEventImageString(value: string): boolean {
+  if (/^https?:\/\/\S+$/i.test(value) || value.startsWith('/')) {
+    return value.length <= 2000;
+  }
+  return (
+    value.length <= 450000 &&
+    /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(value)
+  );
+}
+
 export class NoticeboardEventError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -58,67 +54,89 @@ export class NoticeboardEventError extends Error {
   }
 }
 
-function mapEvent(row: EventCatalogListingRow): NoticeboardCampusEvent {
-  if (!row.start_date) {
-    throw new Error(`Event ${row.id} is missing its start date.`);
-  }
-  if (!isEventCategory(row.category)) {
-    throw new Error(`Event ${row.id} has an unsupported category.`);
-  }
-  if (!isEventMode(row.mode) || !isEventLocation(row.event_where)) {
-    throw new Error(`Event ${row.id} has unsupported event details.`);
+function mapEvent(row: EventCatalogRow): NoticeboardCampusEvent {
+  const category: EventCategory = isEventCategory(row.category)
+    ? row.category
+    : row.event_type === 'hackathon'
+      ? 'Hackathon'
+      : 'Workshop';
+  const mode: EventMode = isEventMode(row.mode) ? row.mode : 'Offline';
+  const where: EventWhere = isEventLocation(row.event_where) ? row.event_where : 'In campus';
+  const fallbackDate = row.registration_deadline || todayISO();
+  const start = row.start_date || fallbackDate;
+  const eventType: EventType = row.event_type === 'hackathon' ? 'hackathon' : 'event';
+  const base = {
+    id: row.id,
+    title: row.title || 'Campus Event',
+    category,
+    description: row.description || '',
+    mode,
+    where,
+    place: row.place || 'ADYPU Campus',
+    start,
+    ...(row.end_date ? { end: row.end_date } : {}),
+    registrationDeadline: row.registration_deadline || start,
+    capacity: typeof row.capacity === 'number' && row.capacity > 0 ? row.capacity : 50,
+    isPublished: Boolean(row.is_published),
+    imageUrl: row.image_url || null,
+  };
+
+  if (eventType === 'hackathon') {
+    return {
+      ...base,
+      type: 'hackathon',
+      teamSizeMin: row.team_size_min ?? 1,
+      teamSizeMax: row.team_size_max ?? 4,
+      theme: row.theme ?? '',
+      prize: row.prize ?? '',
+      rules: Array.isArray(row.rules) ? row.rules : [],
+    };
   }
 
   return {
-    id: row.id,
-    title: row.title,
+    ...base,
     type: 'event',
-    category: row.category,
-    description: row.description,
-    mode: row.mode,
-    where: row.event_where,
-    place: row.place,
-    start: row.start_date,
-    ...(row.end_date ? { end: row.end_date } : {}),
-    registrationDeadline: row.registration_deadline,
-    capacity: row.capacity,
-    registerUrl: '#',
-    isPublished: row.is_published,
   };
 }
 
 export async function getPublishedNoticeboardEvents(
   limit = 100,
 ): Promise<NoticeboardCampusEvent[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 100) : 100;
+  // Single equality filter avoids requiring a multi-field Firestore composite index.
   const { data, error } = await supabase
     .from('event_catalog')
     .select(EVENT_FIELDS)
-    .eq('noticeboard_managed', true)
-    .eq('event_type', 'event')
-    .eq('is_published', true)
-    .gte('start_date', todayISO())
-    .order('start_date', { ascending: true })
-    .limit(safeLimit);
+    .eq('is_published', true);
 
-  if (error) throw new Error(`Unable to load published campus events: ${error.message}`);
-  return (data ?? []).map(mapEvent);
+  if (error) {
+    console.warn('Unable to load published campus events:', error.message);
+    return [];
+  }
+
+  const today = todayISO();
+  return (data ?? [])
+    .map(mapEvent)
+    .filter((event) => (event.end ?? event.start) >= today)
+    .sort((a, b) => a.start.localeCompare(b.start))
+    .slice(0, safeLimit);
 }
 
 export async function getOrganizerNoticeboardEvents(): Promise<NoticeboardCampusEvent[]> {
   await requireOrganizer();
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const { data, error } = await supabase
     .from('event_catalog')
-    .select(EVENT_FIELDS)
-    .eq('noticeboard_managed', true)
-    .eq('event_type', 'event')
-    .not('start_date', 'is', null)
-    .order('start_date', { ascending: true });
+    .select(EVENT_FIELDS);
 
-  if (error) throw new Error(`Unable to load organizer event listings: ${error.message}`);
-  return (data ?? []).map(mapEvent);
+  if (error) {
+    console.warn('Unable to load organizer event listings:', error.message);
+    return [];
+  }
+  return (data ?? [])
+    .map(mapEvent)
+    .sort((a, b) => a.start.localeCompare(b.start));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -154,6 +172,8 @@ export function parseNoticeboardEventInput(value: unknown): NoticeboardEventInpu
   const registrationDeadline = value.registrationDeadline;
   const capacity = value.capacity;
   const isPublished = value.isPublished;
+  const rawType = value.type;
+  const rawImage = value.imageUrl;
 
   if (!isEventCategory(category)) {
     throw new NoticeboardEventError('Choose a valid event category.', 400);
@@ -167,7 +187,7 @@ export function parseNoticeboardEventInput(value: unknown): NoticeboardEventInpu
   if (!isISODate(start) || !isISODate(registrationDeadline)) {
     throw new NoticeboardEventError('Enter a valid event date and registration deadline.', 400);
   }
-  if (end !== undefined && end !== '' && !isISODate(end)) {
+  if (end !== undefined && end !== null && end !== '' && !isISODate(end)) {
     throw new NoticeboardEventError('Enter a valid event end date.', 400);
   }
   if (typeof capacity !== 'number' || !Number.isInteger(capacity) || capacity < 1 || capacity > 10000) {
@@ -177,6 +197,18 @@ export function parseNoticeboardEventInput(value: unknown): NoticeboardEventInpu
     throw new NoticeboardEventError('Choose whether to publish this event.', 400);
   }
 
+  let imageUrl: string | null = null;
+  if (typeof rawImage === 'string' && rawImage.trim()) {
+    const cleanedImage = rawImage.trim();
+    if (!isValidEventImageString(cleanedImage)) {
+      throw new NoticeboardEventError(
+        'Image must be a valid https:// URL or an uploaded PNG/JPEG/WebP image under 450 KB.',
+        400,
+      );
+    }
+    imageUrl = cleanedImage;
+  }
+
   const endDate = typeof end === 'string' && end ? end : undefined;
   if (endDate && endDate < start) {
     throw new NoticeboardEventError('The event end date cannot be before its start date.', 400);
@@ -184,12 +216,31 @@ export function parseNoticeboardEventInput(value: unknown): NoticeboardEventInpu
   if (registrationDeadline > start) {
     throw new NoticeboardEventError('The registration deadline cannot be after the event starts.', 400);
   }
-  if (isPublished && start < todayISO()) {
+  if (isPublished && (endDate ?? start) < todayISO()) {
     throw new NoticeboardEventError('Past events cannot be published as upcoming listings.', 400);
   }
 
+  const type: EventType =
+    rawType === 'hackathon' || (rawType === undefined && category === 'Hackathon')
+      ? 'hackathon'
+      : 'event';
+
+  const teamSizeMin =
+    type === 'hackathon' && typeof value.teamSizeMin === 'number' && Number.isInteger(value.teamSizeMin)
+      ? Math.max(1, Math.min(20, value.teamSizeMin))
+      : type === 'hackathon'
+        ? 1
+        : null;
+  const teamSizeMax =
+    type === 'hackathon' && typeof value.teamSizeMax === 'number' && Number.isInteger(value.teamSizeMax)
+      ? Math.max(teamSizeMin ?? 1, Math.min(20, value.teamSizeMax))
+      : type === 'hackathon'
+        ? 4
+        : null;
+
   return {
     title,
+    type,
     category,
     description,
     mode,
@@ -200,6 +251,15 @@ export function parseNoticeboardEventInput(value: unknown): NoticeboardEventInpu
     registrationDeadline,
     capacity,
     isPublished,
+    imageUrl,
+    teamSizeMin,
+    teamSizeMax,
+    theme: type === 'hackathon' && typeof value.theme === 'string' ? value.theme.trim() || null : null,
+    prize: type === 'hackathon' && typeof value.prize === 'string' ? value.prize.trim() || null : null,
+    rules:
+      type === 'hackathon' && Array.isArray(value.rules)
+        ? value.rules.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())).map((r) => r.trim())
+        : [],
   };
 }
 
@@ -212,11 +272,12 @@ async function requireOrganizer(): Promise<void> {
 }
 
 function toCatalogFields(input: NoticeboardEventInput) {
+  const eventType = input.type ?? (input.category === 'Hackathon' ? 'hackathon' : 'event');
   return {
     title: input.title,
     capacity: input.capacity,
     registration_deadline: input.registrationDeadline,
-    event_type: 'event' as const,
+    event_type: eventType,
     noticeboard_managed: true,
     category: input.category,
     description: input.description,
@@ -225,6 +286,12 @@ function toCatalogFields(input: NoticeboardEventInput) {
     place: input.place,
     start_date: input.start,
     end_date: input.end ?? null,
+    image_url: input.imageUrl ?? null,
+    team_size_min: eventType === 'hackathon' ? (input.teamSizeMin ?? 1) : null,
+    team_size_max: eventType === 'hackathon' ? (input.teamSizeMax ?? 4) : null,
+    theme: eventType === 'hackathon' ? (input.theme ?? null) : null,
+    prize: eventType === 'hackathon' ? (input.prize ?? null) : null,
+    rules: eventType === 'hackathon' ? (input.rules ?? []) : [],
     is_published: input.isPublished,
     noticeboard_updated_at: new Date().toISOString(),
   };
@@ -234,14 +301,14 @@ export async function createNoticeboardEvent(
   input: NoticeboardEventInput,
 ): Promise<NoticeboardCampusEvent> {
   await requireOrganizer();
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const { data, error } = await supabase
     .from('event_catalog')
     .insert({ id: randomUUID(), ...toCatalogFields(input) })
     .select(EVENT_FIELDS)
     .single();
 
-  if (error) throw new Error(`Unable to create campus event: ${error.message}`);
+  if (error || !data) throw new Error(`Unable to create campus event: ${error?.message || 'Unknown error'}`);
   return mapEvent(data);
 }
 
@@ -250,17 +317,22 @@ export async function updateNoticeboardEvent(
   input: NoticeboardEventInput,
 ): Promise<NoticeboardCampusEvent> {
   await requireOrganizer();
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const { data, error } = await supabase
     .from('event_catalog')
     .update(toCatalogFields(input))
     .eq('id', id)
-    .eq('noticeboard_managed', true)
-    .eq('event_type', 'event')
     .select(EVENT_FIELDS)
     .maybeSingle();
 
   if (error) throw new Error(`Unable to update campus event: ${error.message}`);
   if (!data) throw new NoticeboardEventError('This event listing no longer exists.', 404);
   return mapEvent(data);
+}
+
+export async function deleteNoticeboardEvent(id: string): Promise<void> {
+  await requireOrganizer();
+  const supabase = await createDbClient();
+  const { error } = await supabase.from('event_catalog').delete().eq('id', id);
+  if (error) throw new Error(`Unable to delete campus event: ${error.message}`);
 }

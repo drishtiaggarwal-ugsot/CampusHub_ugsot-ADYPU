@@ -1,0 +1,1443 @@
+rules_version = '2';
+
+// =============================================================================
+// CampusHub Cloud Firestore Security Rules (Project: campus-hub26)
+// =============================================================================
+//
+// Assumed Data Model
+// ------------------
+// Note: The Next.js REST/query wrapper (lib/db/client.ts) stores date fields
+// as ISO-8601 strings (or YYYY-MM-DD) and injects `id`, `created_at`, and
+// `updated_at` on writes. Date-like validators below accept bounded strings
+// (8..64 chars) or native Firestore `timestamp` values.
+//
+// 1. profiles/{userId}
+//    - id: string (required, immutable, == userId)
+//    - email: string (required, email format, <= 254 chars)
+//    - full_name: string (required, 1..120 chars)
+//    - course_year: string|null (optional, <= 100 chars)
+//    - role: string (required, 'student' | 'organizer'; student-only on self-create except verified bootstrap admin, organizer-only on update)
+//    - github_username: string|null (optional, <= 64 chars)
+//    - skills: list|null (optional, <= 50 items)
+//    - bio: string|null (optional, <= 1000 chars)
+//    - interests: list (optional, <= 30 items)
+//    - goals: list (optional, <= 30 items)
+//    - looking_for_team: bool (optional)
+//    - onboarding_completed: bool (optional)
+//    - is_profile_private: bool (optional)
+//    - is_suspended: bool (required, false on create, organizer-only on update)
+//    - warning_count: int (required, 0 on create, 0..1000, organizer-only on update)
+//    - is_hidden_from_leaderboard: bool (optional, organizer-only on update)
+//    - suspension_reason: string|null (optional, <= 500 chars, organizer-only on update)
+//    - dockers_count: int (optional, 0..1000000)
+//    - docking_count: int (optional, 0..1000000)
+//    - created_at: string|timestamp (optional, immutable)
+//    - updated_at: string|timestamp (optional)
+//
+// 2. event_catalog/{eventId}
+//    - id, title, capacity, registration_deadline, event_type, is_published (required)
+//    - team_size_min, team_size_max, theme, prize, rules, category, description,
+//      mode, event_where, place, start_date, end_date, image_url, noticeboard_managed,
+//      noticeboard_updated_at, organizer_ids, organizer_emails, created_at, updated_at
+//
+// 3. event_registrations/{regId}
+//    - event_id, user_id (required, immutable); id, registered_at, created_at
+//
+// 4. event_announcements/{id}
+//    - event_id, author_id, author_name, message (required); id, created_at, updated_at
+//
+// 5. event_teams/{teamId}
+//    - event_id, name, leader_id, leader_email (required); id, created_at, updated_at
+//
+// 6. event_team_members/{memberId}
+//    - event_id, team_id, member_email (required); id, email_key, invite_id, created_at, updated_at
+//
+// 7. event_attendance/{id}
+//    - event_id, user_id, status ('present'|'absent') (required); id, created_at, updated_at
+//
+// 8. event_certificates/{id}
+//    - event_id, user_id (required); id, issued_at, created_at
+//
+// 9. forum_posts/{postId}
+//    - type ('question'|'discussion'|'announcement'), title, content, author_id (required)
+//    - id, tags, accepted_answer_id, is_reported, is_hidden, created_at, updated_at
+//
+// 10. forum_answers/{answerId}
+//     - post_id, author_id, content (required); id, is_reported, is_hidden, created_at, updated_at
+//
+// 11. forum_upvotes/{id}
+//     - user_id, item_type ('post'|'answer'), item_id (required); id, created_at, updated_at
+//
+// 12. forum_reports/{id}
+//     - reporter_id, item_type ('post'|'answer'), item_id, reason (required); id, created_at, updated_at
+//
+// 13. projects/{projectId}
+//     - title, short_description, description, owner_id (required)
+//     - id, tech_stack, github_url, demo_url, image_url, looking_for_collaborators,
+//       roles_needed, is_hidden, created_at, updated_at
+//
+// 14. project_likes/{id} & project_bookmarks/{id}
+//     - user_id, project_id (required); id, created_at, updated_at
+//
+// 15. project_comments/{commentId}
+//     - project_id, user_id, content (required); id, is_hidden, created_at, updated_at
+//
+// 16. project_collaborations/{reqId}
+//     - project_id, sender_id, message, status ('pending'|'accepted'|'declined') (required)
+//     - id, role_interested, created_at, updated_at
+//
+// 17. mentor_profiles/{id}
+//     - user_id, bio, status ('pending'|'approved'|'rejected') (required)
+//     - id, skills, areas, availability_slots, created_at, updated_at
+//
+// 18. mentorship_sessions/{id}
+//     - mentor_id, mentee_id, slot, date, topic, status (required)
+//     - id, notes, created_at, updated_at
+//
+// 19. code_reviews/{id}
+//     - requester_id, title, notes, status ('open'|'claimed'|'reviewed'|'resolved') (required)
+//     - id, github_url, code_snippet, language, mentor_id, feedback, created_at, updated_at
+//
+// 20. opportunities/{id}
+//     - title, organization, category, description, link, deadline (required)
+//     - id, creator_id, location, eligibility, created_at, updated_at
+//
+// 21. opportunity_bookmarks/{id}
+//     - user_id, opportunity_id (required); id, created_at, updated_at
+//
+// 22. point_rules/{id}
+//     - action_key, points, category, description (required); id, created_at, updated_at
+//
+// 23. notifications/{id}
+//     - user_id, type, title, message, is_read (required); id, link, created_at, updated_at
+//
+// 24. notification_preferences/{userId}
+//     - user_id (required, == userId); id, email_notifications, notify_team_invites,
+//       notify_event_updates, notify_mentorship, notify_forum, notify_projects,
+//       created_at, updated_at
+//
+// 25. reports/{id}
+//     - reporter_id, item_type, item_id, reason, status (required)
+//     - id, details, moderator_id, resolution_notes, created_at, updated_at, resolved_at
+//
+// 26. moderation_logs/{id}
+//     - moderator_id, action, target_type, target_id (required); id, details, created_at, updated_at
+//
+// 27. user_forks/{id}
+//     - forker_id, forked_id (required); id, created_at, updated_at
+//
+// 28. rate_limits/{id}
+//     - user_id, action (required); id, target_id, created_at, updated_at (client writes denied)
+//
+// 29. team_invitations/{id}
+//     - team_name, sender_id, sender_name, sender_email, receiver_id, receiver_name,
+//       receiver_email, status ('pending'|'accepted'|'declined'|'expired') (required)
+//     - id, team_id, event_id, event_title, message, created_at, updated_at
+//
+// 30. system_meta/{id}
+//     - status (required); id, databaseVersion, initializedAt, updatedBy, updated_at
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // Helper Functions
+    // =========================================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) ||
+             request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) ||
+             request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+             request.resource.data[field].size() >= minLen &&
+             request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidUrl(url) {
+      return url is string &&
+             url.size() <= 1000 &&
+             (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+             email.size() >= 3 &&
+             email.size() <= 254 &&
+             email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidList(listVal, maxSize) {
+      return listVal is list && listVal.size() <= maxSize;
+    }
+
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    function isRequiredString(data, field, minLen, maxLen) {
+      return data[field] is string &&
+             data[field].size() >= minLen &&
+             data[field].size() <= maxLen;
+    }
+
+    function isNullableString(data, field, minLen, maxLen) {
+      return !(field in data) ||
+             data[field] == null ||
+             (data[field] is string &&
+              data[field].size() >= minLen &&
+              data[field].size() <= maxLen);
+    }
+
+    function isNullableUrl(data, field, maxLen) {
+      return !(field in data) ||
+             data[field] == null ||
+             (data[field] is string &&
+              data[field].size() <= maxLen &&
+              isValidUrl(data[field]));
+    }
+
+    function isValidDateLike(val) {
+      return val is timestamp ||
+             (val is string && val.size() >= 8 && val.size() <= 64);
+    }
+
+    function isOptionalDateLike(data, field) {
+      return !(field in data) ||
+             data[field] == null ||
+             isValidDateLike(data[field]);
+    }
+
+    function isOptionalBool(data, field) {
+      return !(field in data) || data[field] is bool;
+    }
+
+    function isOptionalNullableInt(data, field, minVal, maxVal) {
+      return !(field in data) ||
+             data[field] == null ||
+             (data[field] is int &&
+              data[field] >= minVal &&
+              data[field] <= maxVal);
+    }
+
+    function isOptionalStringList(data, field, maxItems) {
+      return !(field in data) ||
+             data[field] == null ||
+             isValidList(data[field], maxItems);
+    }
+
+    // Role & Status Lookups (Authority derived solely from trusted profile doc or bootstrap admin email)
+    function isBootstrapAdmin() {
+      return isAuthenticated() &&
+             'email' in request.auth.token &&
+             request.auth.token.email is string &&
+             request.auth.token.email.lower() == 'sahildehadray157@gmail.com';
+    }
+
+    function isOrganizer() {
+      return isAuthenticated() &&
+             (isBootstrapAdmin() ||
+              (exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) &&
+               'role' in get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data &&
+               get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'organizer'));
+    }
+
+    function isNotSuspended() {
+      return isAuthenticated() &&
+             (!exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) ||
+              !('is_suspended' in get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data) ||
+              get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.is_suspended != true);
+    }
+
+    function isTeamLeader(teamId) {
+      return isAuthenticated() &&
+             teamId is string &&
+             exists(/databases/$(database)/documents/event_teams/$(teamId)) &&
+             'leader_id' in get(/databases/$(database)/documents/event_teams/$(teamId)).data &&
+             get(/databases/$(database)/documents/event_teams/$(teamId)).data.leader_id == request.auth.uid;
+    }
+
+    function isProjectOwner(projectId) {
+      return isAuthenticated() &&
+             projectId is string &&
+             exists(/databases/$(database)/documents/projects/$(projectId)) &&
+             'owner_id' in get(/databases/$(database)/documents/projects/$(projectId)).data &&
+             get(/databases/$(database)/documents/projects/$(projectId)).data.owner_id == request.auth.uid;
+    }
+
+    function isApprovedMentorDoc(mentorProfileId) {
+      return isAuthenticated() &&
+             mentorProfileId is string &&
+             exists(/databases/$(database)/documents/mentor_profiles/$(mentorProfileId)) &&
+             'user_id' in get(/databases/$(database)/documents/mentor_profiles/$(mentorProfileId)).data &&
+             'status' in get(/databases/$(database)/documents/mentor_profiles/$(mentorProfileId)).data &&
+             get(/databases/$(database)/documents/mentor_profiles/$(mentorProfileId)).data.user_id == request.auth.uid &&
+             get(/databases/$(database)/documents/mentor_profiles/$(mentorProfileId)).data.status == 'approved';
+    }
+
+    function isSessionMentor(mentorId) {
+      return isAuthenticated() &&
+             mentorId is string &&
+             (mentorId == request.auth.uid ||
+              (exists(/databases/$(database)/documents/mentor_profiles/$(mentorId)) &&
+               'user_id' in get(/databases/$(database)/documents/mentor_profiles/$(mentorId)).data &&
+               get(/databases/$(database)/documents/mentor_profiles/$(mentorId)).data.user_id == request.auth.uid));
+    }
+
+    function isRegisteredForEvent(eventId, userId) {
+      return eventId is string &&
+             eventId != '' &&
+             exists(/databases/$(database)/documents/event_registrations/$(eventId + '__' + userId));
+    }
+
+    function isAcceptedInviteForSelfJoin(invite, data, authEmail, hasInviteId) {
+      return invite.status == 'accepted' &&
+             (!('event_id' in invite) || invite.event_id == null || invite.event_id == data.event_id) &&
+             (!hasInviteId || !('team_id' in invite) || invite.team_id == null || invite.team_id == data.team_id) &&
+             (invite.receiver_id == request.auth.uid ||
+              ('email_verified' in request.auth.token &&
+               request.auth.token.email_verified == true &&
+               invite.receiver_email == authEmail));
+    }
+
+    function isInvitedTeamSelfJoin(data, memberId) {
+      let authEmail = ('email' in request.auth.token && request.auth.token.email is string)
+        ? request.auth.token.email.lower()
+        : '';
+      let hasInviteId = 'invite_id' in data && data.invite_id is string && data.invite_id != '';
+      let inviteDocId = hasInviteId ? data.invite_id : data.team_id;
+      return authEmail != '' &&
+             data.member_email == authEmail &&
+             (!('email_key' in data) || data.email_key == authEmail) &&
+             memberId == data.event_id + '__' + authEmail &&
+             (!('id' in data) || data.id == memberId) &&
+             exists(/databases/$(database)/documents/team_invitations/$(inviteDocId)) &&
+             isAcceptedInviteForSelfJoin(
+               get(/databases/$(database)/documents/team_invitations/$(inviteDocId)).data,
+               data,
+               authEmail,
+               hasInviteId
+             );
+    }
+
+    // =========================================================================
+    // Domain Validators (Used in BOTH create and update)
+    // =========================================================================
+
+    function isValidProfile(data, userId) {
+      return data.keys().hasOnly([
+               'id', 'email', 'full_name', 'course_year', 'role',
+               'github_username', 'skills', 'bio', 'interests', 'goals',
+               'looking_for_team', 'onboarding_completed', 'is_profile_private',
+               'is_suspended', 'warning_count', 'is_hidden_from_leaderboard',
+               'suspension_reason', 'dockers_count', 'docking_count',
+               'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll([
+               'id', 'email', 'full_name', 'role', 'is_suspended', 'warning_count'
+             ]) &&
+             data.id == userId &&
+             isValidEmail(data.email) &&
+             isRequiredString(data, 'full_name', 1, 120) &&
+             isNullableString(data, 'course_year', 0, 100) &&
+             data.role in ['student', 'organizer'] &&
+             isNullableString(data, 'github_username', 0, 64) &&
+             isOptionalStringList(data, 'skills', 50) &&
+             isNullableString(data, 'bio', 0, 1000) &&
+             isOptionalStringList(data, 'interests', 30) &&
+             isOptionalStringList(data, 'goals', 30) &&
+             isOptionalBool(data, 'looking_for_team') &&
+             isOptionalBool(data, 'onboarding_completed') &&
+             isOptionalBool(data, 'is_profile_private') &&
+             data.is_suspended is bool &&
+             data.warning_count is int && data.warning_count >= 0 && data.warning_count <= 1000 &&
+             isOptionalBool(data, 'is_hidden_from_leaderboard') &&
+             isNullableString(data, 'suspension_reason', 0, 500) &&
+             isOptionalNullableInt(data, 'dockers_count', 0, 1000000) &&
+             isOptionalNullableInt(data, 'docking_count', 0, 1000000) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidEventCatalog(data) {
+      return data.keys().hasOnly([
+               'id', 'title', 'capacity', 'registration_deadline', 'event_type',
+               'team_size_min', 'team_size_max', 'theme', 'prize', 'rules',
+               'category', 'description', 'mode', 'event_where', 'place',
+               'start_date', 'end_date', 'image_url', 'noticeboard_managed', 'is_published',
+               'noticeboard_updated_at', 'organizer_ids', 'organizer_emails',
+               'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll([
+               'id', 'title', 'capacity', 'registration_deadline', 'event_type', 'is_published'
+             ]) &&
+             isRequiredString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'title', 1, 200) &&
+             data.capacity is int && data.capacity >= 1 && data.capacity <= 100000 &&
+             isValidDateLike(data.registration_deadline) &&
+             data.event_type in ['event', 'hackathon'] &&
+             isOptionalNullableInt(data, 'team_size_min', 1, 50) &&
+             isOptionalNullableInt(data, 'team_size_max', 1, 50) &&
+             isNullableString(data, 'theme', 0, 300) &&
+             isNullableString(data, 'prize', 0, 300) &&
+             isOptionalStringList(data, 'rules', 50) &&
+             isNullableString(data, 'category', 0, 64) &&
+             isNullableString(data, 'description', 0, 5000) &&
+             (!('mode' in data) || data.mode in ['Online', 'Offline']) &&
+             (!('event_where' in data) || data.event_where in ['In campus', 'Out of campus']) &&
+             isNullableString(data, 'place', 0, 200) &&
+             isOptionalDateLike(data, 'start_date') &&
+             isOptionalDateLike(data, 'end_date') &&
+             isNullableString(data, 'image_url', 0, 450000) &&
+             isOptionalBool(data, 'noticeboard_managed') &&
+             data.is_published is bool &&
+             isOptionalDateLike(data, 'noticeboard_updated_at') &&
+             isOptionalStringList(data, 'organizer_ids', 50) &&
+             isOptionalStringList(data, 'organizer_emails', 50) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidEventRegistration(data) {
+      return data.keys().hasOnly(['id', 'event_id', 'user_id', 'registered_at', 'created_at']) &&
+             data.keys().hasAll(['event_id', 'user_id']) &&
+             isNullableString(data, 'id', 1, 256) &&
+             isRequiredString(data, 'event_id', 1, 128) &&
+             isRequiredString(data, 'user_id', 1, 128) &&
+             isOptionalDateLike(data, 'registered_at') &&
+             isOptionalDateLike(data, 'created_at');
+    }
+
+    function isValidEventAnnouncement(data) {
+      return data.keys().hasOnly([
+               'id', 'event_id', 'author_id', 'author_name', 'message', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['event_id', 'author_id', 'author_name', 'message']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'event_id', 1, 128) &&
+             isRequiredString(data, 'author_id', 1, 128) &&
+             isRequiredString(data, 'author_name', 1, 120) &&
+             isRequiredString(data, 'message', 1, 2000) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidEventTeam(data) {
+      return data.keys().hasOnly([
+               'id', 'event_id', 'name', 'leader_id', 'leader_email', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['event_id', 'name', 'leader_id', 'leader_email']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'event_id', 1, 128) &&
+             isRequiredString(data, 'name', 1, 100) &&
+             isRequiredString(data, 'leader_id', 1, 128) &&
+             isValidEmail(data.leader_email) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidEventTeamMember(data) {
+      return data.keys().hasOnly([
+               'id', 'event_id', 'team_id', 'member_email', 'email_key',
+               'invite_id', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['event_id', 'team_id', 'member_email']) &&
+             isNullableString(data, 'id', 1, 256) &&
+             isRequiredString(data, 'event_id', 1, 128) &&
+             isRequiredString(data, 'team_id', 1, 128) &&
+             isValidEmail(data.member_email) &&
+             (!('email_key' in data) || isValidEmail(data.email_key)) &&
+             isNullableString(data, 'invite_id', 1, 128) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidEventAttendance(data) {
+      return data.keys().hasOnly([
+               'id', 'event_id', 'user_id', 'status', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['event_id', 'user_id', 'status']) &&
+             isNullableString(data, 'id', 1, 256) &&
+             isRequiredString(data, 'event_id', 1, 128) &&
+             isRequiredString(data, 'user_id', 1, 128) &&
+             data.status in ['present', 'absent'] &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidEventCertificate(data) {
+      return data.keys().hasOnly(['id', 'event_id', 'user_id', 'issued_at', 'created_at']) &&
+             data.keys().hasAll(['event_id', 'user_id']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'event_id', 1, 128) &&
+             isRequiredString(data, 'user_id', 1, 128) &&
+             isOptionalDateLike(data, 'issued_at') &&
+             isOptionalDateLike(data, 'created_at');
+    }
+
+    function isValidForumPost(data) {
+      return data.keys().hasOnly([
+               'id', 'type', 'title', 'content', 'author_id', 'tags',
+               'accepted_answer_id', 'is_reported', 'is_hidden', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['type', 'title', 'content', 'author_id']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             data.type in ['question', 'discussion', 'announcement'] &&
+             isRequiredString(data, 'title', 1, 250) &&
+             isRequiredString(data, 'content', 1, 15000) &&
+             isRequiredString(data, 'author_id', 1, 128) &&
+             isOptionalStringList(data, 'tags', 10) &&
+             isNullableString(data, 'accepted_answer_id', 1, 128) &&
+             isOptionalBool(data, 'is_reported') &&
+             isOptionalBool(data, 'is_hidden') &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidForumAnswer(data) {
+      return data.keys().hasOnly([
+               'id', 'post_id', 'author_id', 'content', 'is_reported',
+               'is_hidden', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['post_id', 'author_id', 'content']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'post_id', 1, 128) &&
+             isRequiredString(data, 'author_id', 1, 128) &&
+             isRequiredString(data, 'content', 1, 15000) &&
+             isOptionalBool(data, 'is_reported') &&
+             isOptionalBool(data, 'is_hidden') &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidForumUpvote(data) {
+      return data.keys().hasOnly(['id', 'user_id', 'item_type', 'item_id', 'created_at', 'updated_at']) &&
+             data.keys().hasAll(['user_id', 'item_type', 'item_id']) &&
+             isNullableString(data, 'id', 1, 256) &&
+             isRequiredString(data, 'user_id', 1, 128) &&
+             data.item_type in ['post', 'answer'] &&
+             isRequiredString(data, 'item_id', 1, 128) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidForumReport(data) {
+      return data.keys().hasOnly([
+               'id', 'reporter_id', 'item_type', 'item_id', 'reason', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['reporter_id', 'item_type', 'item_id', 'reason']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'reporter_id', 1, 128) &&
+             data.item_type in ['post', 'answer'] &&
+             isRequiredString(data, 'item_id', 1, 128) &&
+             isRequiredString(data, 'reason', 1, 500) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasOnly([
+               'id', 'title', 'short_description', 'description', 'tech_stack',
+               'github_url', 'demo_url', 'image_url', 'looking_for_collaborators',
+               'roles_needed', 'owner_id', 'is_hidden', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['title', 'short_description', 'description', 'owner_id']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'title', 1, 200) &&
+             isRequiredString(data, 'short_description', 1, 500) &&
+             isRequiredString(data, 'description', 1, 20000) &&
+             isOptionalStringList(data, 'tech_stack', 30) &&
+             isNullableUrl(data, 'github_url', 500) &&
+             isNullableUrl(data, 'demo_url', 500) &&
+             isNullableUrl(data, 'image_url', 1000) &&
+             isOptionalBool(data, 'looking_for_collaborators') &&
+             isOptionalStringList(data, 'roles_needed', 20) &&
+             isRequiredString(data, 'owner_id', 1, 128) &&
+             isOptionalBool(data, 'is_hidden') &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidProjectInteraction(data) {
+      return data.keys().hasOnly(['id', 'user_id', 'project_id', 'created_at', 'updated_at']) &&
+             data.keys().hasAll(['user_id', 'project_id']) &&
+             isNullableString(data, 'id', 1, 256) &&
+             isRequiredString(data, 'user_id', 1, 128) &&
+             isRequiredString(data, 'project_id', 1, 128) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidProjectComment(data) {
+      return data.keys().hasOnly([
+               'id', 'project_id', 'user_id', 'content', 'is_hidden', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['project_id', 'user_id', 'content']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'project_id', 1, 128) &&
+             isRequiredString(data, 'user_id', 1, 128) &&
+             isRequiredString(data, 'content', 1, 3000) &&
+             isOptionalBool(data, 'is_hidden') &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidProjectCollaboration(data) {
+      return data.keys().hasOnly([
+               'id', 'project_id', 'sender_id', 'message', 'role_interested',
+               'status', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['project_id', 'sender_id', 'message', 'status']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'project_id', 1, 128) &&
+             isRequiredString(data, 'sender_id', 1, 128) &&
+             isRequiredString(data, 'message', 1, 2000) &&
+             isNullableString(data, 'role_interested', 0, 120) &&
+             data.status in ['pending', 'accepted', 'declined'] &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidMentorProfile(data) {
+      return data.keys().hasOnly([
+               'id', 'user_id', 'bio', 'skills', 'areas',
+               'availability_slots', 'status', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['user_id', 'bio', 'status']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'user_id', 1, 128) &&
+             isRequiredString(data, 'bio', 1, 3000) &&
+             isOptionalStringList(data, 'skills', 30) &&
+             isOptionalStringList(data, 'areas', 20) &&
+             isOptionalStringList(data, 'availability_slots', 30) &&
+             data.status in ['pending', 'approved', 'rejected'] &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidMentorshipSession(data) {
+      return data.keys().hasOnly([
+               'id', 'mentor_id', 'mentee_id', 'slot', 'date',
+               'topic', 'notes', 'status', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['mentor_id', 'mentee_id', 'slot', 'date', 'topic', 'status']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'mentor_id', 1, 128) &&
+             isRequiredString(data, 'mentee_id', 1, 128) &&
+             isRequiredString(data, 'slot', 1, 100) &&
+             isRequiredString(data, 'date', 1, 64) &&
+             isRequiredString(data, 'topic', 1, 300) &&
+             isNullableString(data, 'notes', 0, 2000) &&
+             data.status in ['pending', 'accepted', 'declined', 'completed', 'cancelled'] &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidSessionStatusTransition(prevStatus, nextStatus, isMentee, isMentor) {
+      return isOrganizer() ||
+             nextStatus == prevStatus ||
+             (isMentee && prevStatus in ['pending', 'accepted'] && nextStatus == 'cancelled') ||
+             (isMentor && prevStatus == 'pending' && nextStatus in ['accepted', 'declined']) ||
+             (isMentor && prevStatus == 'accepted' && nextStatus in ['completed', 'cancelled']);
+    }
+
+    function isValidCodeReview(data) {
+      return data.keys().hasOnly([
+               'id', 'requester_id', 'title', 'github_url', 'code_snippet',
+               'language', 'notes', 'mentor_id', 'feedback', 'status',
+               'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['requester_id', 'title', 'notes', 'status']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'requester_id', 1, 128) &&
+             isRequiredString(data, 'title', 1, 250) &&
+             isNullableUrl(data, 'github_url', 500) &&
+             isNullableString(data, 'code_snippet', 0, 20000) &&
+             isNullableString(data, 'language', 0, 64) &&
+             isRequiredString(data, 'notes', 1, 3000) &&
+             isNullableString(data, 'mentor_id', 1, 128) &&
+             isNullableString(data, 'feedback', 0, 10000) &&
+             data.status in ['open', 'claimed', 'reviewed', 'resolved'] &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidCodeReviewUpdate() {
+      let prev = resource.data;
+      let next = request.resource.data;
+      return isOrganizer() ||
+             (prev.requester_id == request.auth.uid &&
+              next.status == 'resolved' &&
+              prev.status in ['open', 'claimed', 'reviewed'] &&
+              areImmutableFieldsUnchanged(['mentor_id', 'feedback'])) ||
+             ('mentor_id' in next &&
+              isApprovedMentorDoc(next.mentor_id) &&
+              prev.status == 'open' &&
+              next.status == 'claimed' &&
+              areImmutableFieldsUnchanged(['feedback'])) ||
+             ('mentor_id' in prev &&
+              isApprovedMentorDoc(prev.mentor_id) &&
+              areImmutableFieldsUnchanged(['mentor_id']) &&
+              ((prev.status == 'claimed' && next.status == 'reviewed') ||
+               (prev.status == 'reviewed' && next.status == 'resolved')));
+    }
+
+    function isValidOpportunity(data) {
+      return data.keys().hasOnly([
+               'id', 'creator_id', 'title', 'organization', 'category',
+               'description', 'link', 'deadline', 'location', 'eligibility',
+               'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll([
+               'title', 'organization', 'category', 'description', 'link', 'deadline'
+             ]) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isNullableString(data, 'creator_id', 1, 128) &&
+             isRequiredString(data, 'title', 1, 250) &&
+             isRequiredString(data, 'organization', 1, 200) &&
+             data.category in [
+               'Internships', 'Open-source programs', 'Hackathons',
+               'Fellowships', 'Competitions', 'Research'
+             ] &&
+             isRequiredString(data, 'description', 1, 10000) &&
+             isValidUrl(data.link) && data.link.size() <= 500 &&
+             isValidDateLike(data.deadline) &&
+             isNullableString(data, 'location', 0, 200) &&
+             isNullableString(data, 'eligibility', 0, 500) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidOpportunityBookmark(data) {
+      return data.keys().hasOnly(['id', 'user_id', 'opportunity_id', 'created_at', 'updated_at']) &&
+             data.keys().hasAll(['user_id', 'opportunity_id']) &&
+             isNullableString(data, 'id', 1, 256) &&
+             isRequiredString(data, 'user_id', 1, 128) &&
+             isRequiredString(data, 'opportunity_id', 1, 128) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidPointRule(data) {
+      return data.keys().hasOnly([
+               'id', 'action_key', 'points', 'category', 'description', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['action_key', 'points', 'category', 'description']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'action_key', 1, 100) &&
+             data.points is int && data.points >= 0 && data.points <= 10000 &&
+             data.category in ['events', 'projects', 'forum', 'mentorship'] &&
+             isRequiredString(data, 'description', 1, 500) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasOnly([
+               'id', 'user_id', 'type', 'title', 'message', 'link',
+               'is_read', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['user_id', 'type', 'title', 'message', 'is_read']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'user_id', 1, 128) &&
+             data.type in [
+               'team_invite', 'registration_confirmed', 'waitlist_promoted',
+               'mentor_session', 'code_review', 'answer_received',
+               'answer_accepted', 'project_interaction', 'project_comment',
+               'project_like', 'collaboration_request', 'report_outcome',
+               'announcement', 'fork', 'system'
+             ] &&
+             isRequiredString(data, 'title', 1, 200) &&
+             isRequiredString(data, 'message', 1, 1000) &&
+             (!('link' in data) ||
+              data.link == null ||
+              (data.link is string &&
+               data.link.size() <= 500 &&
+               (data.link.matches("^/.*") || isValidUrl(data.link)))) &&
+             data.is_read is bool &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidNotificationPreferences(data, userId) {
+      return data.keys().hasOnly([
+               'id', 'user_id', 'email_notifications', 'notify_team_invites',
+               'notify_event_updates', 'notify_mentorship', 'notify_forum',
+               'notify_projects', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['user_id']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             data.user_id == userId &&
+             isOptionalBool(data, 'email_notifications') &&
+             isOptionalBool(data, 'notify_team_invites') &&
+             isOptionalBool(data, 'notify_event_updates') &&
+             isOptionalBool(data, 'notify_mentorship') &&
+             isOptionalBool(data, 'notify_forum') &&
+             isOptionalBool(data, 'notify_projects') &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasOnly([
+               'id', 'reporter_id', 'item_type', 'item_id', 'reason', 'details',
+               'status', 'moderator_id', 'resolution_notes', 'created_at',
+               'updated_at', 'resolved_at'
+             ]) &&
+             data.keys().hasAll(['reporter_id', 'item_type', 'item_id', 'reason', 'status']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'reporter_id', 1, 128) &&
+             data.item_type in ['forum_post', 'forum_answer', 'project', 'project_comment', 'user'] &&
+             isRequiredString(data, 'item_id', 1, 128) &&
+             isRequiredString(data, 'reason', 1, 300) &&
+             isNullableString(data, 'details', 0, 2000) &&
+             data.status in ['pending', 'reviewed', 'dismissed', 'action_taken'] &&
+             isNullableString(data, 'moderator_id', 1, 128) &&
+             isNullableString(data, 'resolution_notes', 0, 1000) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at') &&
+             isOptionalDateLike(data, 'resolved_at');
+    }
+
+    function isValidModerationLog(data) {
+      return data.keys().hasOnly([
+               'id', 'moderator_id', 'action', 'target_type', 'target_id',
+               'details', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['moderator_id', 'action', 'target_type', 'target_id']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'moderator_id', 1, 128) &&
+             isRequiredString(data, 'action', 1, 100) &&
+             isRequiredString(data, 'target_type', 1, 100) &&
+             isRequiredString(data, 'target_id', 1, 128) &&
+             isNullableString(data, 'details', 0, 1000) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidUserFork(data) {
+      return data.keys().hasOnly(['id', 'forker_id', 'forked_id', 'created_at', 'updated_at']) &&
+             data.keys().hasAll(['forker_id', 'forked_id']) &&
+             isNullableString(data, 'id', 1, 256) &&
+             isRequiredString(data, 'forker_id', 1, 128) &&
+             isRequiredString(data, 'forked_id', 1, 128) &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidTeamInvitation(data) {
+      return data.keys().hasOnly([
+               'id', 'team_id', 'team_name', 'event_id', 'event_title',
+               'sender_id', 'sender_name', 'sender_email',
+               'receiver_id', 'receiver_name', 'receiver_email',
+               'message', 'status', 'created_at', 'updated_at'
+             ]) &&
+             data.keys().hasAll([
+               'team_name', 'sender_id', 'sender_name', 'sender_email',
+               'receiver_id', 'receiver_name', 'receiver_email', 'status'
+             ]) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isNullableString(data, 'team_id', 1, 128) &&
+             isRequiredString(data, 'team_name', 1, 80) &&
+             isNullableString(data, 'event_id', 1, 128) &&
+             isNullableString(data, 'event_title', 0, 200) &&
+             isRequiredString(data, 'sender_id', 1, 128) &&
+             isRequiredString(data, 'sender_name', 1, 120) &&
+             isValidEmail(data.sender_email) &&
+             isRequiredString(data, 'receiver_id', 1, 128) &&
+             isRequiredString(data, 'receiver_name', 1, 120) &&
+             isValidEmail(data.receiver_email) &&
+             isNullableString(data, 'message', 0, 1000) &&
+             data.status in ['pending', 'accepted', 'declined', 'expired'] &&
+             isOptionalDateLike(data, 'created_at') &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    function isValidSystemMeta(data) {
+      return data.keys().hasOnly([
+               'id', 'status', 'databaseVersion', 'initializedAt', 'updatedBy', 'updated_at'
+             ]) &&
+             data.keys().hasAll(['status']) &&
+             isNullableString(data, 'id', 1, 128) &&
+             isRequiredString(data, 'status', 1, 64) &&
+             isNullableString(data, 'databaseVersion', 1, 32) &&
+             isOptionalDateLike(data, 'initializedAt') &&
+             isNullableString(data, 'updatedBy', 1, 254) &&
+             isOptionalDateLike(data, 'updated_at');
+    }
+
+    // =========================================================================
+    // Collection Rules
+    // =========================================================================
+
+    // Profiles: readable by authenticated users (if not marked private, or owner, or organizer)
+    match /profiles/{userId} {
+      allow read: if isAuthenticated() &&
+                     (!('is_profile_private' in resource.data) ||
+                      resource.data.is_profile_private != true ||
+                      isOwner(userId) ||
+                      isOrganizer());
+
+      allow create: if isOwner(userId) &&
+                       isValidProfile(request.resource.data, userId) &&
+                       ('email' in request.auth.token &&
+                        request.auth.token.email is string &&
+                        request.resource.data.email.lower() == request.auth.token.email.lower()) &&
+                       (request.resource.data.role == 'student' ||
+                        (isBootstrapAdmin() && request.resource.data.role == 'organizer')) &&
+                       request.resource.data.is_suspended == false &&
+                       request.resource.data.warning_count == 0 &&
+                       (!('is_hidden_from_leaderboard' in request.resource.data) ||
+                        request.resource.data.is_hidden_from_leaderboard == false) &&
+                       (!('suspension_reason' in request.resource.data) ||
+                        request.resource.data.suspension_reason == null) &&
+                       (!('dockers_count' in request.resource.data) ||
+                        request.resource.data.dockers_count == 0) &&
+                       (!('docking_count' in request.resource.data) ||
+                        request.resource.data.docking_count == 0);
+
+      allow update: if isValidProfile(request.resource.data, userId) &&
+                       areImmutableFieldsUnchanged(['id', 'created_at']) &&
+                       (!('email' in resource.data &&
+                          resource.data.email is string &&
+                          resource.data.email.lower() == 'sahildehadray157@gmail.com') ||
+                        request.resource.data.role == 'organizer') &&
+                       (isOrganizer() ||
+                        (isOwner(userId) &&
+                         areImmutableFieldsUnchanged([
+                           'email', 'role', 'is_suspended', 'warning_count',
+                           'suspension_reason', 'is_hidden_from_leaderboard',
+                           'dockers_count', 'docking_count'
+                         ])));
+
+      allow delete: if false;
+    }
+
+    // Event Catalog: published events public; all events & writes restricted to organizers
+    match /event_catalog/{eventId} {
+      allow read: if ('is_published' in resource.data && resource.data.is_published == true) ||
+                     isOrganizer();
+      allow create: if isOrganizer() &&
+                       isValidEventCatalog(request.resource.data) &&
+                       request.resource.data.id == eventId;
+      allow update: if isOrganizer() &&
+                       isValidEventCatalog(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'created_at']);
+      allow delete: if isOrganizer();
+    }
+
+    // Event Registrations: publicly readable (for seat capacity & registration status); owner creates/deletes own registration
+    match /event_registrations/{regId} {
+      allow read: if true;
+      allow create: if isAuthenticated() &&
+                       isValidEventRegistration(request.resource.data) &&
+                       request.resource.data.user_id == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAuthenticated() &&
+                       resource.data.user_id == request.auth.uid;
+    }
+
+    // Event Announcements: publicly readable, organizer-writable
+    match /event_announcements/{id} {
+      allow read: if true;
+      allow create: if isOrganizer() &&
+                       isValidEventAnnouncement(request.resource.data) &&
+                       request.resource.data.author_id == request.auth.uid;
+      allow update: if isOrganizer() &&
+                       isValidEventAnnouncement(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'event_id', 'author_id', 'created_at']);
+      allow delete: if isOrganizer();
+    }
+
+    // Event Teams: readable by authenticated users; created by registered leader or organizer; updated/deleted by leader or organizer
+    match /event_teams/{teamId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+                       isValidEventTeam(request.resource.data) &&
+                       request.resource.data.leader_id == request.auth.uid &&
+                       (isRegisteredForEvent(request.resource.data.event_id, request.auth.uid) || isOrganizer());
+      allow update: if isAuthenticated() &&
+                       isValidEventTeam(request.resource.data) &&
+                       (resource.data.leader_id == request.auth.uid || isOrganizer()) &&
+                       areImmutableFieldsUnchanged(['id', 'event_id', 'leader_id', 'created_at']);
+      allow delete: if isAuthenticated() &&
+                       (resource.data.leader_id == request.auth.uid || isOrganizer());
+    }
+
+    // Event Team Members: readable by authenticated users; managed by parent team leader, organizer, or accepted invitee
+    match /event_team_members/{memberId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+                       isValidEventTeamMember(request.resource.data) &&
+                       (isTeamLeader(request.resource.data.team_id) ||
+                        isOrganizer() ||
+                        isInvitedTeamSelfJoin(request.resource.data, memberId));
+      allow update: if isAuthenticated() &&
+                       isValidEventTeamMember(request.resource.data) &&
+                       (isTeamLeader(resource.data.team_id) || isOrganizer()) &&
+                       areImmutableFieldsUnchanged(['id', 'event_id', 'team_id', 'created_at']);
+      allow delete: if isAuthenticated() &&
+                       (isTeamLeader(resource.data.team_id) || isOrganizer());
+    }
+
+    // Team Invitations (Squad-Up): readable only by parties or organizers; validated on create and update
+    match /team_invitations/{id} {
+      allow read: if isAuthenticated() &&
+                     (resource.data.sender_id == request.auth.uid ||
+                      resource.data.receiver_id == request.auth.uid ||
+                      ('email_verified' in request.auth.token &&
+                       request.auth.token.email_verified == true &&
+                       'email' in request.auth.token &&
+                       resource.data.receiver_email == request.auth.token.email) ||
+                      isOrganizer());
+      allow create: if isNotSuspended() &&
+                       isValidTeamInvitation(request.resource.data) &&
+                       request.resource.data.sender_id == request.auth.uid &&
+                       request.resource.data.sender_id != request.resource.data.receiver_id &&
+                       request.resource.data.status == 'pending' &&
+                       request.resource.data.event_id is string &&
+                       request.resource.data.event_id.size() > 0 &&
+                       (isRegisteredForEvent(request.resource.data.event_id, request.auth.uid) || isOrganizer()) &&
+                       (!('email' in request.auth.token) ||
+                        !(request.auth.token.email is string) ||
+                        request.resource.data.sender_email.lower() == request.auth.token.email.lower());
+      allow update: if isAuthenticated() &&
+                       isValidTeamInvitation(request.resource.data) &&
+                       areImmutableFieldsUnchanged([
+                         'id', 'team_id', 'team_name', 'event_id', 'event_title',
+                         'sender_id', 'sender_name', 'sender_email',
+                         'receiver_id', 'receiver_name', 'receiver_email',
+                         'message', 'created_at'
+                       ]) &&
+                       (isOrganizer() ||
+                        ((resource.data.receiver_id == request.auth.uid ||
+                          ('email_verified' in request.auth.token &&
+                           request.auth.token.email_verified == true &&
+                           'email' in request.auth.token &&
+                           request.auth.token.email is string &&
+                           resource.data.receiver_email == request.auth.token.email.lower())) &&
+                         ((resource.data.status == 'pending' &&
+                           request.resource.data.status in ['accepted', 'declined']) ||
+                          (resource.data.status == 'accepted' &&
+                           request.resource.data.status == 'declined'))) ||
+                        (resource.data.sender_id == request.auth.uid &&
+                         resource.data.status == 'pending' &&
+                         request.resource.data.status in ['pending', 'expired', 'declined']));
+      allow delete: if isAuthenticated() &&
+                       (resource.data.sender_id == request.auth.uid || isOrganizer());
+    }
+
+    // Event Attendance: readable by attendee or organizer; writable only by organizers
+    match /event_attendance/{id} {
+      allow read: if isAuthenticated() &&
+                     (resource.data.user_id == request.auth.uid || isOrganizer());
+      allow create: if isOrganizer() && isValidEventAttendance(request.resource.data);
+      allow update: if isOrganizer() &&
+                       isValidEventAttendance(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'event_id', 'user_id', 'created_at']);
+      allow delete: if isOrganizer();
+    }
+
+    // Event Certificates: publicly readable for verification; writable only by organizers
+    match /event_certificates/{id} {
+      allow read: if true;
+      allow create: if isOrganizer() && isValidEventCertificate(request.resource.data);
+      allow update: if isOrganizer() &&
+                       isValidEventCertificate(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'event_id', 'user_id', 'issued_at', 'created_at']);
+      allow delete: if isOrganizer();
+    }
+
+    // Forum Posts: public if not hidden (or organizer); non-suspended create; author/reporter/organizer update; author/organizer delete
+    match /forum_posts/{postId} {
+      allow read: if !('is_hidden' in resource.data) ||
+                     resource.data.is_hidden != true ||
+                     isOrganizer();
+      allow create: if isNotSuspended() &&
+                       isValidForumPost(request.resource.data) &&
+                       request.resource.data.author_id == request.auth.uid &&
+                       (request.resource.data.type != 'announcement' || isOrganizer()) &&
+                       (!('is_hidden' in request.resource.data) || request.resource.data.is_hidden == false) &&
+                       (!('is_reported' in request.resource.data) || request.resource.data.is_reported == false);
+      allow update: if isAuthenticated() &&
+                       isValidForumPost(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'author_id', 'created_at']) &&
+                       (isOrganizer() ||
+                        (resource.data.author_id == request.auth.uid &&
+                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['is_hidden', 'is_reported']) &&
+                         (request.resource.data.type == resource.data.type ||
+                          request.resource.data.type != 'announcement')) ||
+                        (isNotSuspended() &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasAny(['is_reported']) &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_reported', 'updated_at']) &&
+                         request.resource.data.is_reported == true));
+      allow delete: if isAuthenticated() &&
+                       (resource.data.author_id == request.auth.uid || isOrganizer());
+    }
+
+    // Forum Answers: public if not hidden (or organizer); non-suspended create; author/reporter/organizer update; author/organizer delete
+    match /forum_answers/{answerId} {
+      allow read: if !('is_hidden' in resource.data) ||
+                     resource.data.is_hidden != true ||
+                     isOrganizer();
+      allow create: if isNotSuspended() &&
+                       isValidForumAnswer(request.resource.data) &&
+                       request.resource.data.author_id == request.auth.uid &&
+                       (!('is_hidden' in request.resource.data) || request.resource.data.is_hidden == false) &&
+                       (!('is_reported' in request.resource.data) || request.resource.data.is_reported == false);
+      allow update: if isAuthenticated() &&
+                       isValidForumAnswer(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'post_id', 'author_id', 'created_at']) &&
+                       (isOrganizer() ||
+                        (resource.data.author_id == request.auth.uid &&
+                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['is_hidden', 'is_reported'])) ||
+                        (isNotSuspended() &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasAny(['is_reported']) &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_reported', 'updated_at']) &&
+                         request.resource.data.is_reported == true));
+      allow delete: if isAuthenticated() &&
+                       (resource.data.author_id == request.auth.uid || isOrganizer());
+    }
+
+    // Forum Upvotes: publicly readable; user creates/deletes own upvotes
+    match /forum_upvotes/{id} {
+      allow read: if true;
+      allow create: if isAuthenticated() &&
+                       isValidForumUpvote(request.resource.data) &&
+                       request.resource.data.user_id == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAuthenticated() &&
+                       resource.data.user_id == request.auth.uid;
+    }
+
+    // Forum Reports: reporter creates/reads own; organizers read/update
+    match /forum_reports/{id} {
+      allow read: if isAuthenticated() &&
+                     (resource.data.reporter_id == request.auth.uid || isOrganizer());
+      allow create: if isAuthenticated() &&
+                       isValidForumReport(request.resource.data) &&
+                       request.resource.data.reporter_id == request.auth.uid;
+      allow update: if isOrganizer() &&
+                       isValidForumReport(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'reporter_id', 'item_type', 'item_id', 'created_at']);
+      allow delete: if false;
+    }
+
+    // Projects: public when not hidden, or owner, or organizer
+    match /projects/{projectId} {
+      allow read: if !('is_hidden' in resource.data) ||
+                     resource.data.is_hidden != true ||
+                     (isAuthenticated() && resource.data.owner_id == request.auth.uid) ||
+                     isOrganizer();
+      allow create: if isNotSuspended() &&
+                       isValidProject(request.resource.data) &&
+                       request.resource.data.owner_id == request.auth.uid &&
+                       (!('is_hidden' in request.resource.data) || request.resource.data.is_hidden == false);
+      allow update: if isAuthenticated() &&
+                       isValidProject(request.resource.data) &&
+                       (resource.data.owner_id == request.auth.uid || isOrganizer()) &&
+                       areImmutableFieldsUnchanged(['id', 'owner_id', 'created_at']) &&
+                       (isOrganizer() ||
+                        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['is_hidden']));
+      allow delete: if isAuthenticated() &&
+                       (resource.data.owner_id == request.auth.uid || isOrganizer());
+    }
+
+    // Project Likes: publicly readable; user creates/deletes own likes
+    match /project_likes/{id} {
+      allow read: if true;
+      allow create: if isAuthenticated() &&
+                       isValidProjectInteraction(request.resource.data) &&
+                       request.resource.data.user_id == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAuthenticated() &&
+                       resource.data.user_id == request.auth.uid;
+    }
+
+    // Project Bookmarks: private to owner; user creates/deletes own bookmarks
+    match /project_bookmarks/{id} {
+      allow read: if isAuthenticated() &&
+                     resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated() &&
+                       isValidProjectInteraction(request.resource.data) &&
+                       request.resource.data.user_id == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAuthenticated() &&
+                       resource.data.user_id == request.auth.uid;
+    }
+
+    // Project Comments: public if not hidden (or organizer); non-suspended create; author/project owner/organizer deletes
+    match /project_comments/{commentId} {
+      allow read: if !('is_hidden' in resource.data) ||
+                     resource.data.is_hidden != true ||
+                     isOrganizer();
+      allow create: if isNotSuspended() &&
+                       isValidProjectComment(request.resource.data) &&
+                       request.resource.data.user_id == request.auth.uid &&
+                       (!('is_hidden' in request.resource.data) || request.resource.data.is_hidden == false);
+      allow update: if isOrganizer() &&
+                       isValidProjectComment(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'project_id', 'user_id', 'content', 'created_at']);
+      allow delete: if isAuthenticated() &&
+                       (resource.data.user_id == request.auth.uid ||
+                        isProjectOwner(resource.data.project_id) ||
+                        isOrganizer());
+    }
+
+    // Project Collaborations: readable by sender or project owner; created by sender; updated by project owner
+    match /project_collaborations/{reqId} {
+      allow read: if isAuthenticated() &&
+                     (resource.data.sender_id == request.auth.uid ||
+                      isProjectOwner(resource.data.project_id) ||
+                      isOrganizer());
+      allow create: if isAuthenticated() &&
+                       isValidProjectCollaboration(request.resource.data) &&
+                       request.resource.data.sender_id == request.auth.uid &&
+                       request.resource.data.status == 'pending';
+      allow update: if isAuthenticated() &&
+                       isValidProjectCollaboration(request.resource.data) &&
+                       isProjectOwner(resource.data.project_id) &&
+                       areImmutableFieldsUnchanged([
+                         'id', 'project_id', 'sender_id', 'message', 'role_interested', 'created_at'
+                       ]) &&
+                       resource.data.status == 'pending' &&
+                       request.resource.data.status in ['accepted', 'declined'];
+      allow delete: if false;
+    }
+
+    // Mentor Profiles: public when approved, or owner, or organizer
+    match /mentor_profiles/{id} {
+      allow read: if resource.data.status == 'approved' ||
+                     (isAuthenticated() && resource.data.user_id == request.auth.uid) ||
+                     isOrganizer();
+      allow create: if isAuthenticated() &&
+                       isValidMentorProfile(request.resource.data) &&
+                       ((request.resource.data.user_id == request.auth.uid &&
+                         request.resource.data.status == 'pending') ||
+                        isOrganizer());
+      allow update: if isAuthenticated() &&
+                       isValidMentorProfile(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'user_id', 'created_at']) &&
+                       (isOrganizer() ||
+                        (resource.data.user_id == request.auth.uid &&
+                         (request.resource.data.status == 'pending' ||
+                          request.resource.data.status == resource.data.status)));
+      allow delete: if isOrganizer();
+    }
+
+    // Mentorship Sessions: readable/updatable by mentee, mentor, or organizer; created by mentee
+    match /mentorship_sessions/{id} {
+      allow read: if isAuthenticated() &&
+                     (resource.data.mentee_id == request.auth.uid ||
+                      isSessionMentor(resource.data.mentor_id) ||
+                      isOrganizer());
+      allow create: if isAuthenticated() &&
+                       isValidMentorshipSession(request.resource.data) &&
+                       request.resource.data.mentee_id == request.auth.uid &&
+                       request.resource.data.status == 'pending';
+      allow update: if isAuthenticated() &&
+                       isValidMentorshipSession(request.resource.data) &&
+                       (resource.data.mentee_id == request.auth.uid ||
+                        isSessionMentor(resource.data.mentor_id) ||
+                        isOrganizer()) &&
+                       areImmutableFieldsUnchanged([
+                         'id', 'mentor_id', 'mentee_id', 'date', 'slot', 'topic', 'created_at'
+                       ]) &&
+                       isValidSessionStatusTransition(
+                         resource.data.status,
+                         request.resource.data.status,
+                         resource.data.mentee_id == request.auth.uid,
+                         isSessionMentor(resource.data.mentor_id)
+                       );
+      allow delete: if false;
+    }
+
+    // Code Reviews: publicly readable; created by requester; updated by requester, approved mentor, or organizer
+    match /code_reviews/{id} {
+      allow read: if true;
+      allow create: if isAuthenticated() &&
+                       isValidCodeReview(request.resource.data) &&
+                       request.resource.data.requester_id == request.auth.uid &&
+                       request.resource.data.status == 'open' &&
+                       (!('mentor_id' in request.resource.data) || request.resource.data.mentor_id == null);
+      allow update: if isAuthenticated() &&
+                       isValidCodeReview(request.resource.data) &&
+                       areImmutableFieldsUnchanged([
+                         'id', 'requester_id', 'title', 'github_url', 'code_snippet',
+                         'language', 'notes', 'created_at'
+                       ]) &&
+                       isValidCodeReviewUpdate();
+      allow delete: if false;
+    }
+
+    // Opportunities: publicly readable; writable only by organizers
+    match /opportunities/{id} {
+      allow read: if true;
+      allow create: if isOrganizer() && isValidOpportunity(request.resource.data);
+      allow update: if isOrganizer() &&
+                       isValidOpportunity(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'created_at']);
+      allow delete: if isOrganizer();
+    }
+
+    // Opportunity Bookmarks: private to owner; user creates/deletes own bookmarks
+    match /opportunity_bookmarks/{id} {
+      allow read: if isAuthenticated() &&
+                     resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated() &&
+                       isValidOpportunityBookmark(request.resource.data) &&
+                       request.resource.data.user_id == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAuthenticated() &&
+                       resource.data.user_id == request.auth.uid;
+    }
+
+    // Point Rules: publicly readable; writable only by organizers
+    match /point_rules/{id} {
+      allow read: if true;
+      allow create: if isOrganizer() && isValidPointRule(request.resource.data);
+      allow update: if isOrganizer() &&
+                       isValidPointRule(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'action_key', 'created_at']);
+      allow delete: if isOrganizer();
+    }
+
+    // Notifications: readable/updatable by owner; creatable by non-suspended authenticated users for valid trigger types
+    match /notifications/{id} {
+      allow read: if isAuthenticated() &&
+                     resource.data.user_id == request.auth.uid;
+      allow create: if isNotSuspended() &&
+                       isValidNotification(request.resource.data) &&
+                       request.resource.data.is_read == false &&
+                       (isOrganizer() ||
+                        (request.resource.data.user_id == request.auth.uid &&
+                         request.resource.data.type in [
+                           'team_invite', 'registration_confirmed', 'mentor_session',
+                           'code_review', 'answer_received', 'answer_accepted',
+                           'project_interaction', 'project_comment', 'project_like',
+                           'collaboration_request', 'fork'
+                         ]) ||
+                        (request.resource.data.user_id != request.auth.uid &&
+                         request.resource.data.type in [
+                           'team_invite', 'mentor_session', 'code_review',
+                           'answer_received', 'answer_accepted', 'project_interaction',
+                           'project_comment', 'project_like', 'collaboration_request', 'fork'
+                         ]));
+      allow update: if isAuthenticated() &&
+                       resource.data.user_id == request.auth.uid &&
+                       isValidNotification(request.resource.data) &&
+                       areImmutableFieldsUnchanged([
+                         'id', 'user_id', 'type', 'title', 'message', 'link', 'created_at'
+                       ]) &&
+                       (request.resource.data.is_read == true ||
+                        request.resource.data.is_read == resource.data.is_read);
+      allow delete: if false;
+    }
+
+    // Notification Preferences: private to owner
+    match /notification_preferences/{userId} {
+      allow read: if isOwner(userId) &&
+                     resource.data.user_id == request.auth.uid;
+      allow create: if isOwner(userId) &&
+                       isValidNotificationPreferences(request.resource.data, userId);
+      allow update: if isOwner(userId) &&
+                       resource.data.user_id == request.auth.uid &&
+                       isValidNotificationPreferences(request.resource.data, userId) &&
+                       areImmutableFieldsUnchanged(['id', 'user_id', 'created_at']);
+      allow delete: if false;
+    }
+
+    // Reports: reporter creates & reads own; organizers read & resolve
+    match /reports/{id} {
+      allow read: if isAuthenticated() &&
+                     (resource.data.reporter_id == request.auth.uid || isOrganizer());
+      allow create: if isAuthenticated() &&
+                       isValidReport(request.resource.data) &&
+                       request.resource.data.reporter_id == request.auth.uid &&
+                       request.resource.data.status == 'pending' &&
+                       (!('moderator_id' in request.resource.data) || request.resource.data.moderator_id == null) &&
+                       (!('resolved_at' in request.resource.data) || request.resource.data.resolved_at == null);
+      allow update: if isOrganizer() &&
+                       isValidReport(request.resource.data) &&
+                       areImmutableFieldsUnchanged([
+                         'id', 'reporter_id', 'item_type', 'item_id', 'reason', 'details', 'created_at'
+                       ]);
+      allow delete: if false;
+    }
+
+    // Moderation Logs: readable and creatable only by organizers (immutable audit log)
+    match /moderation_logs/{id} {
+      allow read: if isOrganizer();
+      allow create: if isOrganizer() &&
+                       isValidModerationLog(request.resource.data) &&
+                       request.resource.data.moderator_id == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // User Forks: publicly readable; authenticated user creates/deletes own forks (no self-fork)
+    match /user_forks/{id} {
+      allow read: if true;
+      allow create: if isAuthenticated() &&
+                       isValidUserFork(request.resource.data) &&
+                       request.resource.data.forker_id == request.auth.uid &&
+                       request.resource.data.forker_id != request.resource.data.forked_id;
+      allow update: if false;
+      allow delete: if isAuthenticated() &&
+                       resource.data.forker_id == request.auth.uid;
+    }
+
+    // Rate Limits: server-only (unused on client; deny client writes so users cannot forge or clear rate limits)
+    match /rate_limits/{id} {
+      allow read: if isOrganizer();
+      allow create, update, delete: if false;
+    }
+
+    // System Meta: publicly readable status/ping; writable only by organizers
+    match /system_meta/{id} {
+      allow read: if true;
+      allow create, update: if isOrganizer() && isValidSystemMeta(request.resource.data);
+      allow delete: if isOrganizer();
+    }
+
+    // =========================================================================
+    // Default Deny Everything Else
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

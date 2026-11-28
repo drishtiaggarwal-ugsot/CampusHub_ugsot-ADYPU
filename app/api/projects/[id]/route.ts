@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { deleteProject, getProjectById, updateProject } from '@/lib/db/projects';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -27,10 +28,7 @@ export async function PUT(request: Request, context: RouteContext) {
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('Error updating project:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to update project' },
-      { status: 403 },
-    );
+    return apiErrorResponse(err, 'Failed to update project');
   }
 }
 
@@ -41,9 +39,6 @@ export async function DELETE(request: Request, context: RouteContext) {
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('Error deleting project:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to delete project' },
-      { status: 403 },
-    );
+    return apiErrorResponse(err, 'Failed to delete project');
   }
 }

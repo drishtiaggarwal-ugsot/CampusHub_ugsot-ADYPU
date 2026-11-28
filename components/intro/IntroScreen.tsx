@@ -28,14 +28,6 @@ export default function IntroScreen({ signedIn = false }: { signedIn?: boolean }
   const enterRef = useRef<HTMLButtonElement>(null);
   const touchStartY = useRef<number | null>(null);
   const [closing, setClosing] = useState(false);
-  const [prevPathname, setPrevPathname] = useState(pathname);
-
-  if (prevPathname !== pathname) {
-    setPrevPathname(pathname);
-    if (pathname === '/intro') {
-      setClosing(false);
-    }
-  }
 
   const close = useCallback((destination: string) => {
     if (closing) return;
@@ -49,6 +41,7 @@ export default function IntroScreen({ signedIn = false }: { signedIn?: boolean }
       document.documentElement.dataset.introSeen = 'true';
       delete document.documentElement.dataset.introFirstVisit;
       window.dispatchEvent(new Event(INTRO_EVENT));
+      setClosing(false);
       router.replace(destination);
     };
 

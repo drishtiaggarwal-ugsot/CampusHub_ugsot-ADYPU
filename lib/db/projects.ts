@@ -1,80 +1,13 @@
 import 'server-only';
-import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase/server';
+import { createDbClient, isFirestoreConfigured } from '@/lib/db/client';
 import { getCurrentUser } from '@/lib/auth';
 import { checkUserPostingEligibility } from './moderation';
 import { createNotification } from './notifications';
 import type { CollaborationRequest, GitHubRepoStats, Project, ProjectComment } from '@/lib/types';
 import type { Database } from '@/lib/db/database.types';
 
-// Built-in starter seed projects
-const SAMPLE_PROJECTS: Project[] = [
-  {
-    id: 'sample-proj-1',
-    title: 'CampusPulse IoT Energy Grid',
-    shortDescription: 'Smart campus power monitoring using ESP32 nodes and Next.js live telemetry dashboard.',
-    description: 'CampusPulse was built for the UGSOT Smart Campus Ideathon. It tracks real-time classroom power draw, identifies idle consumption across Block A and B, and notifies campus facilities when anomalies are detected.',
-    techStack: ['React', 'Next.js', 'PostgreSQL', 'Python', 'IoT'],
-    githubUrl: 'https://github.com/campus-hub/campuspulse-iot',
-    demoUrl: 'https://campus-hub-demo.vercel.app',
-    imageUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80',
-    lookingForCollaborators: true,
-    rolesNeeded: ['Embedded Systems Dev', 'Data Analyst'],
-    ownerId: 'student-seed-1',
-    ownerName: 'Aarav Patil',
-    ownerEmail: 'student@adypu.edu.in',
-    createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-    likesCount: 18,
-    commentsCount: 3,
-    hasLiked: false,
-    hasBookmarked: false,
-    canEdit: false,
-  },
-  {
-    id: 'sample-proj-2',
-    title: 'CodeSync Collaborative Whiteboard',
-    shortDescription: 'Peer-to-peer visual workspace for students preparing for DSA and system design interviews.',
-    description: 'Real-time collaborative canvas with executable JavaScript and Python scratchpads. Built to help UGSOT students practice data structures and algorithms together in study pods.',
-    techStack: ['TypeScript', 'Canvas', 'WebSockets', 'Node.js'],
-    githubUrl: 'https://github.com/campus-hub/codesync-whiteboard',
-    demoUrl: 'https://codesync.dev',
-    imageUrl: 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=800&q=80',
-    lookingForCollaborators: true,
-    rolesNeeded: ['UI/UX Designer', 'Backend Go dev'],
-    ownerId: 'sneha-user-id',
-    ownerName: 'Sneha Kulkarni',
-    ownerEmail: 'sneha@adypu.edu.in',
-    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    likesCount: 24,
-    commentsCount: 5,
-    hasLiked: false,
-    hasBookmarked: false,
-    canEdit: false,
-  },
-  {
-    id: 'sample-proj-3',
-    title: 'AutoGrader CLI for C++ Labs',
-    shortDescription: 'Local terminal tool that runs automated test suites against student C++ assignments.',
-    description: 'An open-source CLI that compiles and tests student code against professor testcases in an isolated sandbox, giving instantaneous feedback on memory leaks and edge-cases before final submission.',
-    techStack: ['C/C++', 'Linux', 'Docker', 'Bash'],
-    githubUrl: 'https://github.com/campus-hub/autograder-cli',
-    demoUrl: null,
-    imageUrl: null,
-    lookingForCollaborators: false,
-    rolesNeeded: [],
-    ownerId: 'rohan-user-id',
-    ownerName: 'Rohan Deshmukh',
-    ownerEmail: 'rohan@adypu.edu.in',
-    createdAt: new Date(Date.now() - 86400000 * 8).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000 * 8).toISOString(),
-    likesCount: 15,
-    commentsCount: 2,
-    hasLiked: false,
-    hasBookmarked: false,
-    canEdit: false,
-  },
-];
+// Built-in starter projects collection is empty to ensure all projects shown are genuine from Cloud Firestore
+const SAMPLE_PROJECTS: Project[] = [];
 
 // Simple in-memory cache for GitHub statistics (5 minute TTL)
 const gitHubCache = new Map<string, { stats: GitHubRepoStats | null; expiry: number }>();
@@ -128,12 +61,12 @@ export async function getProjects(options?: {
   lookingForCollaborators?: boolean;
   search?: string;
 }): Promise<Project[]> {
-  if (!isSupabaseConfigured()) {
+  if (!(await isFirestoreConfigured())) {
     return filterSampleProjects(SAMPLE_PROJECTS, options);
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const currentUser = await getCurrentUser();
 
     let query = supabase.from('projects').select('*').order('created_at', { ascending: false });
@@ -147,7 +80,7 @@ export async function getProjects(options?: {
 
     const { data: projects, error } = await query;
     if (error || !projects || projects.length === 0) {
-      return filterSampleProjects(SAMPLE_PROJECTS, options);
+      return [];
     }
 
     const ownerIds = [...new Set(projects.map((p) => p.owner_id))];
@@ -277,32 +210,14 @@ export async function getProjectById(
   collaborationRequests?: CollaborationRequest[];
   githubStats?: GitHubRepoStats | null;
 } | null> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   const isOrganizer = currentUser?.role === 'organizer';
 
   const { data: row, error } = await supabase.from('projects').select('*').eq('id', id).maybeSingle();
 
   if (error || !row) {
-    const sample = SAMPLE_PROJECTS.find((p) => p.id === id);
-    if (!sample) return null;
-    const githubStats = await fetchGitHubRepoStats(sample.githubUrl);
-    return {
-      project: sample,
-      comments: [
-        {
-          id: 'sample-comm-1',
-          projectId: id,
-          userId: 'expert-1',
-          userName: 'Isha Joshi',
-          userEmail: 'isha@adypu.edu.in',
-          content: 'This looks super clean! Are you presenting this in the upcoming Ideathon?',
-          createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-          canDelete: false,
-        },
-      ],
-      githubStats,
-    };
+    return null;
   }
 
   const { data: ownerProfile } = await supabase
@@ -422,7 +337,7 @@ export async function createProject(data: {
   lookingForCollaborators: boolean;
   rolesNeeded: string[];
 }): Promise<string> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to post a project.');
 
@@ -449,7 +364,7 @@ export async function createProject(data: {
     .select('id')
     .single();
 
-  if (error) throw new Error(`Failed to create project: ${error.message}`);
+  if (error || !row) throw new Error(`Failed to create project: ${error?.message || 'Unknown error'}`);
   return row.id;
 }
 
@@ -467,40 +382,63 @@ export async function updateProject(
     rolesNeeded: string[];
   }>,
 ): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('Unauthorized');
+
+  const { data: existing } = await supabase
+    .from('projects')
+    .select('id, owner_id')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (!existing) throw new Error('Project not found');
+  if (existing.owner_id !== currentUser.id && currentUser.role !== 'organizer') {
+    throw new Error('Forbidden: You can only edit your own projects.');
+  }
 
   const updates: Database['public']['Tables']['projects']['Update'] = {
     updated_at: new Date().toISOString(),
   };
 
-  if (data.title !== undefined) updates.title = data.title.trim();
-  if (data.shortDescription !== undefined) updates.short_description = data.shortDescription.trim();
-  if (data.description !== undefined) updates.description = data.description.trim();
-  if (data.techStack !== undefined) updates.tech_stack = data.techStack;
-  if (data.githubUrl !== undefined) updates.github_url = data.githubUrl?.trim() || null;
-  if (data.demoUrl !== undefined) updates.demo_url = data.demoUrl?.trim() || null;
-  if (data.imageUrl !== undefined) updates.image_url = data.imageUrl?.trim() || null;
-  if (data.lookingForCollaborators !== undefined)
+  if (typeof data.title === 'string') updates.title = data.title.trim();
+  if (typeof data.shortDescription === 'string') updates.short_description = data.shortDescription.trim();
+  if (typeof data.description === 'string') updates.description = data.description.trim();
+  if (Array.isArray(data.techStack)) updates.tech_stack = data.techStack;
+  if (data.githubUrl !== undefined) updates.github_url = typeof data.githubUrl === 'string' ? data.githubUrl.trim() || null : null;
+  if (data.demoUrl !== undefined) updates.demo_url = typeof data.demoUrl === 'string' ? data.demoUrl.trim() || null : null;
+  if (data.imageUrl !== undefined) updates.image_url = typeof data.imageUrl === 'string' ? data.imageUrl.trim() || null : null;
+  if (typeof data.lookingForCollaborators === 'boolean') {
     updates.looking_for_collaborators = data.lookingForCollaborators;
-  if (data.rolesNeeded !== undefined) updates.roles_needed = data.rolesNeeded;
+  }
+  if (Array.isArray(data.rolesNeeded)) updates.roles_needed = data.rolesNeeded;
 
   const { error } = await supabase.from('projects').update(updates).eq('id', id);
   if (error) throw new Error(`Failed to update project: ${error.message}`);
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('Unauthorized');
+
+  const { data: existing } = await supabase
+    .from('projects')
+    .select('id, owner_id')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (!existing) throw new Error('Project not found');
+  if (existing.owner_id !== currentUser.id && currentUser.role !== 'organizer') {
+    throw new Error('Forbidden: You can only delete your own projects.');
+  }
 
   const { error } = await supabase.from('projects').delete().eq('id', id);
   if (error) throw new Error(`Failed to delete project: ${error.message}`);
 }
 
 export async function toggleProjectLike(projectId: string): Promise<{ liked: boolean; count: number }> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to like projects.');
 
@@ -514,7 +452,13 @@ export async function toggleProjectLike(projectId: string): Promise<{ liked: boo
   if (existing) {
     await supabase.from('project_likes').delete().eq('project_id', projectId).eq('user_id', currentUser.id);
   } else {
-    await supabase.from('project_likes').insert({ project_id: projectId, user_id: currentUser.id });
+    await supabase.from('project_likes').upsert(
+      {
+        project_id: projectId,
+        user_id: currentUser.id,
+      },
+      { onConflict: 'project_id,user_id' },
+    );
 
     // Notify project owner of like
     try {
@@ -544,7 +488,7 @@ export async function toggleProjectLike(projectId: string): Promise<{ liked: boo
 }
 
 export async function toggleProjectBookmark(projectId: string): Promise<{ bookmarked: boolean }> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to bookmark projects.');
 
@@ -562,14 +506,20 @@ export async function toggleProjectBookmark(projectId: string): Promise<{ bookma
       .eq('project_id', projectId)
       .eq('user_id', currentUser.id);
   } else {
-    await supabase.from('project_bookmarks').insert({ project_id: projectId, user_id: currentUser.id });
+    await supabase.from('project_bookmarks').upsert(
+      {
+        project_id: projectId,
+        user_id: currentUser.id,
+      },
+      { onConflict: 'project_id,user_id' },
+    );
   }
 
   return { bookmarked: !existing };
 }
 
 export async function getMyBookmarkedProjects(): Promise<Project[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) return [];
 
@@ -609,7 +559,7 @@ export async function getMyBookmarkedProjects(): Promise<Project[]> {
 }
 
 export async function addProjectComment(projectId: string, content: string): Promise<string> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to comment.');
 
@@ -629,7 +579,7 @@ export async function addProjectComment(projectId: string, content: string): Pro
     .select('id')
     .single();
 
-  if (error) throw new Error(`Failed to post comment: ${error.message}`);
+  if (error || !data) throw new Error(`Failed to post comment: ${error?.message || 'Unknown error'}`);
 
   // Notify project owner of new comment
   try {
@@ -656,10 +606,35 @@ export async function addProjectComment(projectId: string, content: string): Pro
   return data.id;
 }
 
-export async function deleteProjectComment(commentId: string): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+export async function deleteProjectComment(commentId: string, projectId?: string): Promise<void> {
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('Unauthorized');
+
+  const { data: comment } = await supabase
+    .from('project_comments')
+    .select('id, user_id, project_id')
+    .eq('id', commentId)
+    .maybeSingle();
+
+  if (!comment) throw new Error('Comment not found');
+  if (projectId && comment.project_id !== projectId) {
+    throw new Error('Comment does not belong to this project.');
+  }
+
+  let isProjectOwner = false;
+  if (comment.project_id) {
+    const { data: proj } = await supabase
+      .from('projects')
+      .select('owner_id')
+      .eq('id', comment.project_id)
+      .maybeSingle();
+    isProjectOwner = proj?.owner_id === currentUser.id;
+  }
+
+  if (comment.user_id !== currentUser.id && !isProjectOwner && currentUser.role !== 'organizer') {
+    throw new Error('Forbidden: You can only delete your own comments.');
+  }
 
   const { error } = await supabase.from('project_comments').delete().eq('id', commentId);
   if (error) throw new Error(`Failed to delete comment: ${error.message}`);
@@ -670,7 +645,7 @@ export async function sendCollaborationRequest(
   message: string,
   roleInterested: string,
 ): Promise<string> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to send a collaboration request.');
 
@@ -686,7 +661,7 @@ export async function sendCollaborationRequest(
     .select('id')
     .single();
 
-  if (error) throw new Error(`Failed to send request: ${error.message}`);
+  if (error || !data) throw new Error(`Failed to send request: ${error?.message || 'Unknown error'}`);
 
   // Notify project owner
   try {
@@ -716,10 +691,32 @@ export async function sendCollaborationRequest(
 export async function updateCollaborationStatus(
   requestId: string,
   status: 'accepted' | 'declined',
+  projectId?: string,
 ): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('Unauthorized');
+
+  const { data: reqRow } = await supabase
+    .from('project_collaborations')
+    .select('id, project_id')
+    .eq('id', requestId)
+    .maybeSingle();
+
+  if (!reqRow) throw new Error('Collaboration request not found');
+  if (projectId && reqRow.project_id !== projectId) {
+    throw new Error('Collaboration request does not belong to this project.');
+  }
+
+  const { data: proj } = await supabase
+    .from('projects')
+    .select('owner_id')
+    .eq('id', reqRow.project_id)
+    .maybeSingle();
+
+  if (proj?.owner_id !== currentUser.id && currentUser.role !== 'organizer') {
+    throw new Error('Forbidden: Only the project owner can respond to collaboration requests.');
+  }
 
   const { error } = await supabase
     .from('project_collaborations')

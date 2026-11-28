@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import {
+  deleteNoticeboardEvent,
   NoticeboardEventError,
   parseNoticeboardEventInput,
   updateNoticeboardEvent,
@@ -25,5 +26,19 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
     console.error('Unable to update organizer event listing.', error);
     return NextResponse.json({ error: 'Unable to save this event listing right now.' }, { status: 500 });
+  }
+}
+
+export async function DELETE(_request: Request, context: RouteContext) {
+  try {
+    const { eventId } = await context.params;
+    await deleteNoticeboardEvent(eventId);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    if (error instanceof NoticeboardEventError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    console.error('Unable to delete organizer event listing.', error);
+    return NextResponse.json({ error: 'Unable to delete this event listing right now.' }, { status: 500 });
   }
 }

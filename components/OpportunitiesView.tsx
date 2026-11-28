@@ -252,16 +252,17 @@ export default function OpportunitiesView({ initialOpportunities, currentUser }:
             <button
               onClick={() => handleOpenPostModal()}
               style={{
-                padding: '10px 18px',
-                backgroundColor: '#FFE066',
-                border: '2px solid #1a1a1a',
-                borderRadius: 4,
-                fontWeight: 700,
+                padding: '9px 18px',
+                backgroundColor: 'var(--ink)',
+                color: 'var(--canvas)',
+                border: 'none',
+                borderRadius: 8,
+                fontWeight: 600,
+                fontSize: 13,
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 6,
-                boxShadow: '2px 2px 0 #1a1a1a',
               }}
             >
               + Post Opportunity
@@ -320,11 +321,11 @@ export default function OpportunitiesView({ initialOpportunities, currentUser }:
               <article
                 key={opp.id}
                 style={{
-                  border: '2px solid #1a1a1a',
-                  borderRadius: 4,
+                  border: '1px solid var(--border)',
+                  borderRadius: 14,
                   padding: 20,
-                  backgroundColor: '#fff',
-                  boxShadow: '3px 3px 0 #1a1a1a',
+                  backgroundColor: 'var(--card)',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 12,
@@ -363,10 +364,11 @@ export default function OpportunitiesView({ initialOpportunities, currentUser }:
                           style={{
                             fontSize: 11,
                             fontWeight: 700,
-                            padding: '2px 8px',
-                            border: '1.5px solid #1a1a1a',
-                            borderRadius: 4,
-                            backgroundColor: '#FFE066',
+                            padding: '3px 8px',
+                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                            borderRadius: 6,
+                            backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                            color: '#b45309',
                           }}
                         >
                           ⚡ Campus Hackathon
@@ -378,11 +380,11 @@ export default function OpportunitiesView({ initialOpportunities, currentUser }:
                           style={{
                             fontSize: 11,
                             fontWeight: 700,
-                            padding: '2px 8px',
-                            border: '1.5px solid #1a1a1a',
-                            borderRadius: 4,
-                            backgroundColor: '#F25F5C',
-                            color: '#fff',
+                            padding: '3px 8px',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            borderRadius: 6,
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            color: '#dc2626',
                           }}
                         >
                           ⏳ Closing Soon
@@ -394,11 +396,11 @@ export default function OpportunitiesView({ initialOpportunities, currentUser }:
                           style={{
                             fontSize: 11,
                             fontWeight: 700,
-                            padding: '2px 8px',
-                            border: '1.5px solid #666',
-                            borderRadius: 4,
-                            backgroundColor: '#eee',
-                            color: '#666',
+                            padding: '3px 8px',
+                            border: '1px solid var(--border)',
+                            borderRadius: 6,
+                            backgroundColor: 'var(--panel)',
+                            color: 'var(--muted)',
                           }}
                         >
                           Expired
@@ -407,7 +409,7 @@ export default function OpportunitiesView({ initialOpportunities, currentUser }:
                     </div>
 
                     <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{opp.title}</h3>
-                    <p style={{ margin: '4px 0 0 0', fontWeight: 600, color: '#444', fontSize: 14 }}>
+                    <p style={{ margin: '4px 0 0 0', fontWeight: 600, color: 'var(--muted)', fontSize: 14 }}>
                       🏢 {opp.organization} · 📍 {opp.location}
                     </p>
                   </div>
@@ -418,16 +420,17 @@ export default function OpportunitiesView({ initialOpportunities, currentUser }:
                     disabled={bookmarkingId === opp.id}
                     title={opp.isBookmarked ? 'Remove from bookmarks' : 'Bookmark this opportunity'}
                     style={{
-                      padding: '6px 12px',
-                      border: '2px solid #1a1a1a',
-                      borderRadius: 4,
-                      backgroundColor: opp.isBookmarked ? '#FFE066' : '#fff',
-                      fontWeight: 700,
+                      padding: '6px 14px',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      backgroundColor: opp.isBookmarked ? 'rgba(245, 158, 11, 0.12)' : 'var(--panel)',
+                      color: opp.isBookmarked ? '#b45309' : 'var(--ink)',
+                      fontWeight: 600,
                       fontSize: 13,
                       cursor: 'pointer',
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: 4,
+                      gap: 6,
                     }}
                   >
                     {opp.isBookmarked ? '★ Bookmarked' : '☆ Bookmark'}
@@ -503,14 +506,13 @@ export default function OpportunitiesView({ initialOpportunities, currentUser }:
                         href={opp.eventUrl || '/events'}
                         style={{
                           padding: '8px 16px',
-                          backgroundColor: '#4EA8DE',
+                          backgroundColor: 'var(--electric-blue)',
                           color: '#fff',
-                          border: '2px solid #1a1a1a',
-                          borderRadius: 4,
-                          fontWeight: 700,
+                          border: 'none',
+                          borderRadius: 8,
+                          fontWeight: 600,
                           fontSize: 13,
                           textDecoration: 'none',
-                          boxShadow: '2px 2px 0 #1a1a1a',
                         }}
                       >
                         View Hackathon & Register →
@@ -522,14 +524,13 @@ export default function OpportunitiesView({ initialOpportunities, currentUser }:
                         rel="noopener noreferrer"
                         style={{
                           padding: '8px 16px',
-                          backgroundColor: '#1a1a1a',
-                          color: '#fff',
-                          border: '2px solid #1a1a1a',
-                          borderRadius: 4,
-                          fontWeight: 700,
+                          backgroundColor: 'var(--ink)',
+                          color: 'var(--canvas)',
+                          border: 'none',
+                          borderRadius: 8,
+                          fontWeight: 600,
                           fontSize: 13,
                           textDecoration: 'none',
-                          boxShadow: '2px 2px 0 #888',
                         }}
                       >
                         Visit & Apply ↗
@@ -561,10 +562,10 @@ export default function OpportunitiesView({ initialOpportunities, currentUser }:
         >
           <div
             style={{
-              backgroundColor: '#fff',
-              border: '3px solid #1a1a1a',
-              borderRadius: 4,
-              boxShadow: '6px 6px 0 #1a1a1a',
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: 16,
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.2)',
               width: '100%',
               maxWidth: 580,
               maxHeight: '90vh',
@@ -779,9 +780,10 @@ export default function OpportunitiesView({ initialOpportunities, currentUser }:
                   onClick={() => setIsPosting(false)}
                   style={{
                     padding: '8px 16px',
-                    border: '2px solid #1a1a1a',
-                    borderRadius: 4,
-                    backgroundColor: '#f5f5f5',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    backgroundColor: 'var(--panel)',
+                    color: 'var(--ink)',
                     fontWeight: 600,
                     cursor: 'pointer',
                   }}
@@ -793,12 +795,13 @@ export default function OpportunitiesView({ initialOpportunities, currentUser }:
                   disabled={submitting}
                   style={{
                     padding: '8px 20px',
-                    border: '2px solid #1a1a1a',
-                    borderRadius: 4,
-                    backgroundColor: '#FFE066',
-                    fontWeight: 800,
+                    border: 'none',
+                    borderRadius: 8,
+                    backgroundColor: 'var(--ink)',
+                    color: 'var(--canvas)',
+                    fontWeight: 700,
                     cursor: 'pointer',
-                    boxShadow: '2px 2px 0 #1a1a1a',
+                    opacity: submitting ? 0.7 : 1,
                   }}
                 >
                   {submitting ? 'Saving...' : editingOpp ? 'Update Opportunity' : 'Post Opportunity'}

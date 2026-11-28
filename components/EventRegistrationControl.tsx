@@ -81,8 +81,13 @@ export default function EventRegistrationControl({
         return;
       }
       setStatusOverride({ serverStatus: initialStatus, value: payload.status });
-      setMessage(pendingAction === 'register' ? 'You’re registered.' : 'Your registration was cancelled.');
+      setMessage(pendingAction === 'register' ? 'You’re registered!' : 'Your registration was cancelled.');
       setPendingAction(null);
+
+      // After registering, open the entire page of the event!
+      if (pendingAction === 'register') {
+        router.push(`/events/${encodeURIComponent(event.id)}`);
+      }
       router.refresh();
     } catch (requestError) {
       console.error('Event registration request failed.', requestError);
@@ -105,13 +110,24 @@ export default function EventRegistrationControl({
       )}
       <div className="event-registration__actions">
         {status?.isRegistered ? (
-          <>
-            <span className="event-registration__registered" role="status">Registered</span>
-            <button type="button" className="btn btn--outline"
-              onClick={() => { setError(''); setMessage(''); setPendingAction('cancel'); }}>
-              Cancel
-            </button>
-          </>
+          <span
+            className="event-registration__registered"
+            role="status"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontWeight: 700,
+              padding: '6px 14px',
+              borderRadius: 6,
+              background: '#e6f7ed',
+              color: '#0e7a41',
+              border: '1px solid #a3e6be',
+              fontSize: 13,
+            }}
+          >
+            ✓ Registered
+          </span>
         ) : full ? (
           <span className="event-registration__closed" role="status">Full</span>
         ) : closed ? (

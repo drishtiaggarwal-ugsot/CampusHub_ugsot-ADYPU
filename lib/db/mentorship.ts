@@ -1,79 +1,16 @@
 import 'server-only';
-import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase/server';
+import { createDbClient, isFirestoreConfigured } from '@/lib/db/client';
 import { getCurrentUser } from '@/lib/auth';
 import { createNotification } from './notifications';
 import type { CodeReview, MentorProfile, MentorshipSession } from '@/lib/types';
 
-// Sample fallback mentors
-const SAMPLE_MENTORS: MentorProfile[] = [
-  {
-    id: 'sample-mentor-1',
-    userId: 'rohan-user-id',
-    name: 'Rohan Deshmukh',
-    email: 'rohan@adypu.edu.in',
-    bio: '4th year CSE student & incoming SDE intern. Experienced in Go, Docker, distributed backend systems, and open-source contributions.',
-    skills: ['Go', 'Docker', 'Kubernetes', 'Backend Architecture', 'Git'],
-    areas: ['Backend Systems', 'Open Source', 'Internship Prep'],
-    availabilitySlots: [
-      'Monday 5:00 PM - 6:00 PM',
-      'Wednesday 4:00 PM - 5:00 PM',
-      'Saturday 11:00 AM - 12:00 PM',
-    ],
-    status: 'approved',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'sample-mentor-2',
-    userId: 'sneha-user-id',
-    name: 'Sneha Kulkarni',
-    email: 'sneha@adypu.edu.in',
-    bio: 'AI & Data Science senior with multiple hackathon wins. Specializing in computer vision, PyTorch, and deploying models to cloud backends.',
-    skills: ['Python', 'PyTorch', 'Data Science', 'Machine Learning', 'API Design'],
-    areas: ['ML Pipelines', 'Hackathon Strategy', 'Research Papers'],
-    availabilitySlots: [
-      'Tuesday 6:00 PM - 7:00 PM',
-      'Thursday 5:00 PM - 6:00 PM',
-      'Sunday 2:00 PM - 3:00 PM',
-    ],
-    status: 'approved',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-// Sample fallback code reviews
-const SAMPLE_REVIEWS: CodeReview[] = [
-  {
-    id: 'sample-rev-1',
-    requesterId: 'student-1',
-    requesterName: 'Aarav Patil',
-    requesterEmail: 'student@adypu.edu.in',
-    title: 'Review my custom debounce and throttle hook in React 19',
-    githubUrl: 'https://github.com/campus-hub/hooks-library',
-    codeSnippet: `function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const handler = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-  return debounced;
-}`,
-    language: 'TypeScript',
-    notes: 'Checking if there are any race conditions when unmounting during rapid input updates.',
-    mentorId: 'sample-mentor-1',
-    mentorName: 'Rohan Deshmukh',
-    feedback: 'Your cleanup return is correct! For React 19, consider useDeferredValue if you are debouncing user-driven UI transitions.',
-    status: 'reviewed',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-];
-
 export async function getMentors(skillFilter?: string): Promise<MentorProfile[]> {
-  if (!isSupabaseConfigured()) {
-    return filterSampleMentors(skillFilter);
+  if (!(await isFirestoreConfigured())) {
+    return [];
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     let query = supabase.from('mentor_profiles').select('*').eq('status', 'approved');
 
     if (skillFilter && skillFilter !== 'All') {
@@ -82,7 +19,7 @@ export async function getMentors(skillFilter?: string): Promise<MentorProfile[]>
 
     const { data: rows, error } = await query;
     if (error || !rows || rows.length === 0) {
-      return filterSampleMentors(skillFilter);
+      return [];
     }
 
     const userIds = rows.map((r) => r.user_id);
@@ -106,19 +43,12 @@ export async function getMentors(skillFilter?: string): Promise<MentorProfile[]>
     });
   } catch (err) {
     console.error('Error fetching mentors:', err);
-    return filterSampleMentors(skillFilter);
+    return [];
   }
 }
 
-function filterSampleMentors(skillFilter?: string): MentorProfile[] {
-  if (!skillFilter || skillFilter === 'All') return SAMPLE_MENTORS;
-  return SAMPLE_MENTORS.filter((m) =>
-    m.skills.some((s) => s.toLowerCase().includes(skillFilter.toLowerCase())),
-  );
-}
-
 export async function getMyMentorProfile(): Promise<MentorProfile | null> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) return null;
 
@@ -150,7 +80,7 @@ export async function applyToBeMentor(data: {
   areas: string[];
   availabilitySlots: string[];
 }): Promise<string> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to apply.');
 
@@ -188,7 +118,7 @@ export async function applyToBeMentor(data: {
     .select('id')
     .single();
 
-  if (error) throw new Error(`Failed to submit application: ${error.message}`);
+  if (error || !inserted) throw new Error(`Failed to submit application: ${error?.message || 'Unknown error'}`);
   return inserted.id;
 }
 
@@ -196,7 +126,7 @@ export async function approveMentorProfile(
   mentorId: string,
   status: 'approved' | 'rejected',
 ): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (currentUser?.role !== 'organizer') throw new Error('Only admins can approve mentors.');
 
@@ -215,7 +145,7 @@ export async function bookMentorshipSession(data: {
   topic: string;
   notes?: string;
 }): Promise<string> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to book a mentorship session.');
 
@@ -234,11 +164,11 @@ export async function bookMentorshipSession(data: {
     .select('id')
     .single();
 
-  if (error) {
-    if (error.code === '23505' || error.message.includes('unique')) {
+  if (error || !row) {
+    if (error?.code === '23505' || error?.message.includes('unique')) {
       throw new Error('This slot is already booked for the selected date. Please pick another slot.');
     }
-    throw new Error(`Failed to book session: ${error.message}`);
+    throw new Error(`Failed to book session: ${error?.message || 'Unknown error'}`);
   }
 
   // Notify mentor of new booking
@@ -270,7 +200,7 @@ export async function getMySessions(): Promise<{
   asMentee: MentorshipSession[];
   asMentor: MentorshipSession[];
 }> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) return { asMentee: [], asMentor: [] };
 
@@ -346,9 +276,35 @@ export async function updateSessionStatus(
   sessionId: string,
   status: 'accepted' | 'declined' | 'completed' | 'cancelled',
 ): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('Unauthorized');
+
+  const { data: session } = await supabase
+    .from('mentorship_sessions')
+    .select('id, mentor_id, mentee_id')
+    .eq('id', sessionId)
+    .maybeSingle();
+
+  if (!session) throw new Error('Session not found');
+
+  const { data: mentorProf } = await supabase
+    .from('mentor_profiles')
+    .select('id')
+    .eq('user_id', currentUser.id)
+    .maybeSingle();
+
+  const isSessionMentor = Boolean(mentorProf && mentorProf.id === session.mentor_id);
+  const isSessionMentee = session.mentee_id === currentUser.id;
+  const isOrganizer = currentUser.role === 'organizer';
+
+  if (status === 'cancelled') {
+    if (!isSessionMentor && !isSessionMentee && !isOrganizer) {
+      throw new Error('Forbidden: You cannot cancel this session.');
+    }
+  } else if (!isSessionMentor && !isOrganizer) {
+    throw new Error('Forbidden: Only the assigned mentor can accept, decline, or complete a session.');
+  }
 
   const { error } = await supabase
     .from('mentorship_sessions')
@@ -359,31 +315,42 @@ export async function updateSessionStatus(
 }
 
 export async function getCodeReviews(): Promise<CodeReview[]> {
-  if (!isSupabaseConfigured()) {
-    return SAMPLE_REVIEWS;
+  if (!(await isFirestoreConfigured())) {
+    return [];
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { data: rows, error } = await supabase
       .from('code_reviews')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (error || !rows || rows.length === 0) {
-      return SAMPLE_REVIEWS;
+      return [];
     }
 
     const requesterIds = [...new Set(rows.map((r) => r.requester_id))];
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .in('id', requesterIds);
+    const mentorProfileIds = [...new Set(rows.map((r) => r.mentor_id).filter((id): id is string => Boolean(id)))];
+
+    const { data: mentorProfiles } = mentorProfileIds.length
+      ? await supabase.from('mentor_profiles').select('id, user_id').in('id', mentorProfileIds)
+      : { data: [] };
+
+    const mentorUserIds = (mentorProfiles ?? []).map((m) => m.user_id);
+    const allUserIds = [...new Set([...requesterIds, ...mentorUserIds])];
+
+    const { data: profiles } = allUserIds.length
+      ? await supabase.from('profiles').select('id, full_name, email').in('id', allUserIds)
+      : { data: [] };
 
     const profMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+    const mentorUserMap = new Map((mentorProfiles ?? []).map((m) => [m.id, m.user_id]));
 
     return rows.map((r) => {
       const p = profMap.get(r.requester_id);
+      const mentorUserId = r.mentor_id ? mentorUserMap.get(r.mentor_id) : undefined;
+      const mp = mentorUserId ? profMap.get(mentorUserId) : undefined;
       return {
         id: r.id,
         requesterId: r.requester_id,
@@ -395,7 +362,7 @@ export async function getCodeReviews(): Promise<CodeReview[]> {
         language: r.language,
         notes: r.notes,
         mentorId: r.mentor_id,
-        mentorName: r.mentor_id ? 'Mentor' : null,
+        mentorName: mp ? (mp.full_name?.trim() || mp.email?.split('@')[0] || 'Mentor') : (r.mentor_id ? 'Mentor' : null),
         feedback: r.feedback,
         status: r.status as CodeReview['status'],
         createdAt: r.created_at,
@@ -403,7 +370,7 @@ export async function getCodeReviews(): Promise<CodeReview[]> {
     });
   } catch (err) {
     console.error('Error fetching code reviews:', err);
-    return SAMPLE_REVIEWS;
+    return [];
   }
 }
 
@@ -414,7 +381,7 @@ export async function requestCodeReview(data: {
   language: string;
   notes: string;
 }): Promise<string> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to request a code review.');
 
@@ -432,12 +399,12 @@ export async function requestCodeReview(data: {
     .select('id')
     .single();
 
-  if (error) throw new Error(`Failed to request code review: ${error.message}`);
+  if (error || !row) throw new Error(`Failed to request code review: ${error?.message || 'Unknown error'}`);
   return row.id;
 }
 
 export async function claimCodeReview(reviewId: string): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('Unauthorized');
 
@@ -465,14 +432,38 @@ export async function claimCodeReview(reviewId: string): Promise<void> {
 }
 
 export async function submitReviewFeedback(reviewId: string, feedback: string): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('Unauthorized');
+
+  const [{ data: rev }, { data: mentorProf }] = await Promise.all([
+    supabase
+      .from('code_reviews')
+      .select('id, requester_id, mentor_id, title')
+      .eq('id', reviewId)
+      .maybeSingle(),
+    supabase
+      .from('mentor_profiles')
+      .select('id')
+      .eq('user_id', currentUser.id)
+      .eq('status', 'approved')
+      .maybeSingle(),
+  ]);
+
+  if (!rev) throw new Error('Code review not found');
+  const isOrganizer = currentUser.role === 'organizer';
+  const isApprovedMentor = Boolean(mentorProf);
+  const isAssignedMentor = Boolean(mentorProf && rev.mentor_id === mentorProf.id);
+
+  if (!isOrganizer && !(isApprovedMentor && (!rev.mentor_id || isAssignedMentor))) {
+    throw new Error('Forbidden: Only the assigned approved mentor or an organizer can submit feedback.');
+  }
 
   const { error } = await supabase
     .from('code_reviews')
     .update({
       feedback: feedback.trim(),
+      mentor_id: rev.mentor_id ?? mentorProf?.id ?? null,
       status: 'reviewed',
       updated_at: new Date().toISOString(),
     })
@@ -482,13 +473,7 @@ export async function submitReviewFeedback(reviewId: string, feedback: string): 
 
   // Notify review requester
   try {
-    const { data: rev } = await supabase
-      .from('code_reviews')
-      .select('requester_id, title')
-      .eq('id', reviewId)
-      .maybeSingle();
-
-    if (rev?.requester_id && rev.requester_id !== currentUser.id) {
+    if (rev.requester_id && rev.requester_id !== currentUser.id) {
       await createNotification({
         userId: rev.requester_id,
         actorId: currentUser.id,
@@ -504,9 +489,32 @@ export async function submitReviewFeedback(reviewId: string, feedback: string): 
 }
 
 export async function resolveCodeReview(reviewId: string): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('Unauthorized');
+
+  const [{ data: rev }, { data: mentorProf }] = await Promise.all([
+    supabase
+      .from('code_reviews')
+      .select('id, requester_id, mentor_id')
+      .eq('id', reviewId)
+      .maybeSingle(),
+    supabase
+      .from('mentor_profiles')
+      .select('id')
+      .eq('user_id', currentUser.id)
+      .eq('status', 'approved')
+      .maybeSingle(),
+  ]);
+
+  if (!rev) throw new Error('Code review not found');
+  const isRequester = rev.requester_id === currentUser.id;
+  const isAssignedMentor = Boolean(mentorProf && rev.mentor_id === mentorProf.id);
+  const isOrganizer = currentUser.role === 'organizer';
+
+  if (!isRequester && !isAssignedMentor && !isOrganizer) {
+    throw new Error('Forbidden: Only the requester, assigned mentor, or organizer can resolve this review.');
+  }
 
   const { error } = await supabase
     .from('code_reviews')

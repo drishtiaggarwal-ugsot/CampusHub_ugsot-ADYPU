@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { AuthServiceError, signIn } from '@/lib/auth';
+import { AuthServiceError, SESSION_COOKIE_NAME, signIn } from '@/lib/auth';
 import { isStringRecord, validateSignIn } from '@/lib/validation';
 
 export async function POST(request: Request) {
@@ -12,16 +12,21 @@ export async function POST(request: Request) {
   if (Object.keys(errors).length) return NextResponse.json({ errors }, { status: 400 });
 
   try {
-    await signIn(body.email, body.password);
-    return NextResponse.json({ success: true });
+    const { idToken } = await signIn(body.email, body.password);
+    const response = NextResponse.json({ success: true });
+    response.cookies.set(SESSION_COOKIE_NAME, idToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    return response;
   } catch (error) {
     if (error instanceof AuthServiceError) {
       return NextResponse.json({ form: error.message }, { status: error.status });
     }
-    if (error instanceof Error && error.message.startsWith('Supabase is not configured.')) {
-      return NextResponse.json({ form: error.message }, { status: 503 });
-    }
-    console.error('Unable to sign in with Supabase.', error);
+    console.error('Unable to sign in with Firebase.', error);
     return NextResponse.json({ form: 'Sign-in is temporarily unavailable. Please try again.' }, { status: 503 });
   }
 }

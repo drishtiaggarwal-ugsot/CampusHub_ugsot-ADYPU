@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { createForumPost, getForumPosts, type ForumPostType } from '@/lib/db/community';
 
 export async function GET(request: Request) {
@@ -28,29 +29,29 @@ export async function POST(request: Request) {
     }
 
     const { type, title, content, tags } = body as {
-      type: ForumPostType;
-      title: string;
-      content: string;
-      tags: string[];
+      type?: unknown;
+      title?: unknown;
+      content?: unknown;
+      tags?: unknown;
     };
 
-    if (!title || !title.trim() || !content || !content.trim()) {
+    if (typeof title !== 'string' || !title.trim() || typeof content !== 'string' || !content.trim()) {
       return NextResponse.json({ error: 'Title and content are required' }, { status: 400 });
     }
 
+    const postType: ForumPostType =
+      type === 'discussion' || type === 'announcement' ? type : 'question';
+
     const postId = await createForumPost({
-      type: type || 'question',
+      type: postType,
       title,
       content,
-      tags: Array.isArray(tags) ? tags : [],
+      tags: Array.isArray(tags) ? tags.filter((t): t is string => typeof t === 'string') : [],
     });
 
     return NextResponse.json({ success: true, postId });
   } catch (err) {
     console.error('Error in POST /api/forum/posts:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to create post' },
-      { status: 500 },
-    );
+    return apiErrorResponse(err, 'Failed to create post');
   }
 }

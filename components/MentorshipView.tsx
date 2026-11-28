@@ -383,26 +383,23 @@ export default function MentorshipView({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Controls Bar */}
           <div className="card" style={{ padding: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, marginRight: 4 }}>Skill Area:</span>
-              {SKILL_FILTERS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className="chip"
-                  onClick={() => setSelectedSkill(s)}
-                  style={{
-                    background: selectedSkill === s ? 'var(--ink)' : 'var(--card)',
-                    color: selectedSkill === s ? '#ffffff' : 'var(--ink)',
-                    border: '1.5px solid var(--ink)',
-                    cursor: 'pointer',
-                    fontSize: 12,
-                    padding: '3px 10px',
-                  }}
-                >
-                  {s}
-                </button>
-              ))}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, marginRight: 4, color: 'var(--ink)' }}>Skill Area:</span>
+              {SKILL_FILTERS.map((s) => {
+                const on = selectedSkill.toLowerCase() === s.toLowerCase();
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`filter-pill ${on ? 'is-active' : ''}`}
+                    data-active={on}
+                    onClick={() => setSelectedSkill(s)}
+                    aria-pressed={on}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
             </div>
 
             <div>

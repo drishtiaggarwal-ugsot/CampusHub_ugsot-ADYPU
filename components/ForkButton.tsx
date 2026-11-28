@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Button from './ui/Button';
 
 interface ForkButtonProps {
@@ -20,9 +20,36 @@ export default function ForkButton({
   onCountChange,
   size = 'md',
 }: ForkButtonProps) {
-  const [isForking, setIsForking] = useState(initialIsForking);
+  const [override, setOverride] = useState<{
+    key: string;
+    isForking: boolean;
+    dockersCount: number;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [rateLimitError, setRateLimitError] = useState<string | null>(null);
+
+  const stateKey = targetUserId;
+  const isForking = override && override.key === stateKey ? override.isForking : initialIsForking;
+  const dockersCount = override && override.key === stateKey ? override.dockersCount : initialDockersCount;
+
+  useEffect(() => {
+    let ignore = false;
+    fetch(`/api/students/${targetUserId}/fork`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!ignore && data) {
+          setOverride({
+            key: targetUserId,
+            isForking: Boolean(data.isForking),
+            dockersCount: typeof data.dockersCount === 'number' ? data.dockersCount : 0,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, [targetUserId, stateKey]);
 
   const handleToggle = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -32,15 +59,20 @@ export default function ForkButton({
 
     // Save previous state for rollback
     const prevForking = isForking;
+    const prevCount = dockersCount;
     const nextForking = !prevForking;
+    const optimisticCount = Math.max(0, prevCount + (nextForking ? 1 : -1));
 
     // Optimistic UI update
-    setIsForking(nextForking);
+    setOverride({
+      key: stateKey,
+      isForking: nextForking,
+      dockersCount: optimisticCount,
+    });
     setRateLimitError(null);
     setLoading(true);
 
-    const delta = nextForking ? 1 : -1;
-    onCountChange?.(Math.max(0, initialDockersCount + delta), nextForking);
+    onCountChange?.(optimisticCount, nextForking);
 
     try {
       const res = await fetch(`/api/students/${targetUserId}/fork`, {
@@ -51,27 +83,41 @@ export default function ForkButton({
 
       if (!res.ok) {
         // Rollback optimistic state
-        setIsForking(prevForking);
-        onCountChange?.(initialDockersCount, prevForking);
+        setOverride({
+          key: stateKey,
+          isForking: prevForking,
+          dockersCount: prevCount,
+        });
+        onCountChange?.(prevCount, prevForking);
 
         const errorMsg = data.error || (res.status === 429 ? 'Slow down, try again in a minute.' : 'Failed to update Fork status');
         setRateLimitError(errorMsg);
 
-        // Auto-clear error after 4 seconds
         setTimeout(() => setRateLimitError(null), 4000);
         return;
       }
 
       // Server confirmed live state
-      setIsForking(Boolean(data.is_forking ?? data.isForking));
-      if (typeof data.dockers_count === 'number' || typeof data.dockersCount === 'number') {
-        const count = data.dockers_count ?? data.dockersCount;
-        onCountChange?.(count, Boolean(data.is_forking ?? data.isForking));
+      const confirmedForking = Boolean(data.is_forking ?? data.isForking);
+      const confirmedCount = data.dockers_count ?? data.dockersCount;
+      const resolvedCount = typeof confirmedCount === 'number' ? confirmedCount : optimisticCount;
+
+      setOverride({
+        key: stateKey,
+        isForking: confirmedForking,
+        dockersCount: resolvedCount,
+      });
+      if (typeof confirmedCount === 'number') {
+        onCountChange?.(confirmedCount, confirmedForking);
       }
     } catch {
       // Network rollback
-      setIsForking(prevForking);
-      onCountChange?.(initialDockersCount, prevForking);
+      setOverride({
+        key: stateKey,
+        isForking: prevForking,
+        dockersCount: prevCount,
+      });
+      onCountChange?.(prevCount, prevForking);
       setRateLimitError('Network error. Please try again.');
       setTimeout(() => setRateLimitError(null), 4000);
     } finally {

@@ -10,6 +10,7 @@ export const siteNavigationGroups: { label: string; items: SiteNavigationItem[] 
     label: 'Menu',
     items: [
       { href: '/', label: 'Home' },
+      { href: '/welcome', label: 'Welcome Section' },
       { href: '/projects', label: 'Projects' },
       { href: '/events', label: 'Events' },
       { href: '/students', label: 'Students' },
@@ -28,17 +29,20 @@ export const siteNavigationGroups: { label: string; items: SiteNavigationItem[] 
     items: [
       { href: '/profile', label: 'My profile' },
       { href: '/notifications', label: 'Notifications' },
+      { href: '/admin', label: 'Admin Panel' },
+      { href: '/organizer/events', label: 'Event Manager' },
       { href: '/moderation', label: 'Moderation' },
     ],
   },
 ];
 
 export function getVisibleSiteNavigationGroups(currentUser: CurrentUser | null) {
+  const isOrganizer = currentUser?.role === 'organizer' || currentUser?.email?.toLowerCase() === 'sahildehadray157@gmail.com';
   const visibleGroups = siteNavigationGroups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        if (item.href === '/moderation') return currentUser?.role === 'organizer';
+        if (item.href === '/moderation' || item.href === '/admin' || item.href === '/organizer/events') return isOrganizer;
         if (item.href === '/profile' || item.href === '/notifications') return Boolean(currentUser);
         return true;
       }),

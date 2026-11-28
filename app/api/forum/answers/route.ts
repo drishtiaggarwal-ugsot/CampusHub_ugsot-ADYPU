@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { createForumAnswer } from '@/lib/db/community';
 
 export async function POST(request: Request) {
@@ -8,8 +9,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
     }
 
-    const { postId, content } = body as { postId: string; content: string };
-    if (!postId || !content || !content.trim()) {
+    const { postId, content } = body as { postId?: unknown; content?: unknown };
+    if (typeof postId !== 'string' || !postId.trim() || typeof content !== 'string' || !content.trim()) {
       return NextResponse.json({ error: 'postId and content are required' }, { status: 400 });
     }
 
@@ -17,9 +18,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, answerId });
   } catch (err) {
     console.error('Error in POST /api/forum/answers:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to submit answer' },
-      { status: 500 },
-    );
+    return apiErrorResponse(err, 'Failed to submit answer');
   }
 }

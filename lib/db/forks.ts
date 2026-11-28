@@ -1,5 +1,5 @@
 import 'server-only';
-import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase/server';
+import { createDbClient, isFirestoreConfigured } from '@/lib/db/client';
 import { getCurrentUser } from '@/lib/auth';
 
 export interface StudentForkSummary {
@@ -32,12 +32,12 @@ export async function isForkingUser(targetUserId: string): Promise<boolean> {
   const currentUser = await getCurrentUser();
   if (!currentUser) return false;
 
-  if (!isSupabaseConfigured()) {
+  if (!(await isFirestoreConfigured())) {
     return memoryForks.has(`${currentUser.id}:${targetUserId}`);
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { data, error } = await supabase
       .from('user_forks')
       .select('id')
@@ -58,7 +58,7 @@ export async function isForkingUser(targetUserId: string): Promise<boolean> {
  * Gets live dockers and docking counts for a student
  */
 export async function getForkCounts(userId: string): Promise<{ dockersCount: number; dockingCount: number }> {
-  if (!isSupabaseConfigured()) {
+  if (!(await isFirestoreConfigured())) {
     let dockers = 0;
     let docking = 0;
     for (const key of memoryForks) {
@@ -70,24 +70,10 @@ export async function getForkCounts(userId: string): Promise<{ dockersCount: num
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
-    const { data } = await supabase
-      .from('profiles')
-      .select('dockers_count, docking_count')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (data && typeof data.dockers_count === 'number') {
-      return {
-        dockersCount: data.dockers_count || 0,
-        dockingCount: data.docking_count || 0,
-      };
-    }
-
-    // Fallback: direct table count
+    const supabase = await createDbClient();
     const [dockersRes, dockingRes] = await Promise.all([
-      supabase.from('user_forks').select('*', { count: 'exact', head: true }).eq('forked_id', userId),
-      supabase.from('user_forks').select('*', { count: 'exact', head: true }).eq('forker_id', userId),
+      supabase.from('user_forks').select('id', { count: 'exact', head: true }).eq('forked_id', userId),
+      supabase.from('user_forks').select('id', { count: 'exact', head: true }).eq('forker_id', userId),
     ]);
 
     return {
@@ -107,7 +93,7 @@ export async function forkStudent(targetUserId: string): Promise<ForkStatusResul
   if (!currentUser) throw new Error('AUTH_REQUIRED: You must be signed in to Fork a student.');
   if (currentUser.id === targetUserId) throw new Error('SELF_FORK_BLOCKED: You cannot Fork yourself.');
 
-  if (!isSupabaseConfigured()) {
+  if (!(await isFirestoreConfigured())) {
     // Memory fallback with local rate limit check
     const now = Date.now();
     const cooldownKey = `${currentUser.id}:${targetUserId}`;
@@ -121,7 +107,7 @@ export async function forkStudent(targetUserId: string): Promise<ForkStatusResul
     return { isForking: true, dockersCount: counts.dockersCount, dockingCount: counts.dockingCount };
   }
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
 
   // Try RPC first for strict DB rate limits and notification throttling
   const { data, error } = await supabase.rpc('fork_user', { target_user_id: targetUserId });
@@ -140,10 +126,14 @@ export async function forkStudent(targetUserId: string): Promise<ForkStatusResul
     throw new Error(cleanMsg || 'Slow down, try again in a minute.');
   }
 
-  // Graceful fallback: direct table insert
+  // Deterministic ID prevents duplicate fork rows for the same pair
   const { error: insertError } = await supabase
     .from('user_forks')
-    .insert({ forker_id: currentUser.id, forked_id: targetUserId });
+    .upsert({
+      id: `${currentUser.id}__${targetUserId}`,
+      forker_id: currentUser.id,
+      forked_id: targetUserId,
+    });
 
   if (insertError && !insertError.message.includes('duplicate')) {
     throw new Error(insertError.message);
@@ -161,13 +151,13 @@ export async function unforkStudent(targetUserId: string): Promise<ForkStatusRes
   if (!currentUser) throw new Error('AUTH_REQUIRED: You must be signed in to Unfork a student.');
   if (currentUser.id === targetUserId) throw new Error('SELF_UNFORK_BLOCKED: You cannot Unfork yourself.');
 
-  if (!isSupabaseConfigured()) {
+  if (!(await isFirestoreConfigured())) {
     memoryForks.delete(`${currentUser.id}:${targetUserId}`);
     const counts = await getForkCounts(targetUserId);
     return { isForking: false, dockersCount: counts.dockersCount, dockingCount: counts.dockingCount };
   }
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
 
   const { data, error } = await supabase.rpc('unfork_user', { target_user_id: targetUserId });
 
@@ -184,12 +174,11 @@ export async function unforkStudent(targetUserId: string): Promise<ForkStatusRes
     throw new Error(cleanMsg || 'Slow down, try again in a moment.');
   }
 
-  // Fallback: direct delete
-  await supabase
-    .from('user_forks')
-    .delete()
-    .eq('forker_id', currentUser.id)
-    .eq('forked_id', targetUserId);
+  // Fallback: direct delete by deterministic composite key and query filters
+  await Promise.allSettled([
+    supabase.from('user_forks').delete().eq('id', `${currentUser.id}__${targetUserId}`),
+    supabase.from('user_forks').delete().eq('forker_id', currentUser.id).eq('forked_id', targetUserId),
+  ]);
 
   const counts = await getForkCounts(targetUserId);
   return { isForking: false, dockersCount: counts.dockersCount, dockingCount: counts.dockingCount };
@@ -206,12 +195,12 @@ export async function getDockers(
   const limit = Math.min(options.limit ?? 20, 50);
   const offset = Math.max(options.offset ?? 0, 0);
 
-  if (!isSupabaseConfigured()) {
+  if (!(await isFirestoreConfigured())) {
     return { dockers: [], total: 0 };
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
 
     // 1. Fetch fork records
     const { data: forkRows, count } = await supabase
@@ -272,12 +261,12 @@ export async function getDocking(
   const limit = Math.min(options.limit ?? 20, 50);
   const offset = Math.max(options.offset ?? 0, 0);
 
-  if (!isSupabaseConfigured()) {
+  if (!(await isFirestoreConfigured())) {
     return { docking: [], total: 0 };
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
 
     const { data: forkRows, count } = await supabase
       .from('user_forks')

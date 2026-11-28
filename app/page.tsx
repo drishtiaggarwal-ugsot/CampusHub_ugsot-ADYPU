@@ -1,8 +1,6 @@
 import Link from 'next/link';
 import HomeCalendar from '@/components/HomeCalendar';
 import TeammateCard from '@/components/TeammateCard';
-import Avatar from '@/components/Avatar';
-import { getStudent, events, highlights } from '@/lib/data';
 import { getCurrentUser } from '@/lib/auth';
 import { typeColors } from '@/lib/colors';
 import { eventDays, formatShort, formatWeekday, todayISO, toISO } from '@/lib/dates';
@@ -11,6 +9,7 @@ import Tag from '@/components/ui/Tag';
 import FeatureSuggestions from '@/components/FeatureSuggestions';
 import { getEventRegistrationStatuses, type EventRegistrationStatus } from '@/lib/db/events';
 import { getCommunityPosts } from '@/lib/db/community';
+import { getPublishedNoticeboardEvents } from '@/lib/db/noticeboard-events';
 import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
@@ -19,6 +18,8 @@ export const metadata = { title: 'Home · CampusHub · UGSOT' };
 export default async function HomePage() {
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect('/welcome');
+
+  const events = await getPublishedNoticeboardEvents().catch(() => []);
 
   const today = todayISO();
   const todayDate = new Date(`${today}T00:00:00`);
@@ -53,7 +54,7 @@ export default async function HomePage() {
 
   return (
     <main className="container page home-page">
-      <header className="home-welcome">
+      <header id="hero" className="home-welcome">
         <div>
           <Tag>{formatWeekday(today)}</Tag>
           <h1 className="hero__title">Hey {firstName}, ready to <span className="hero__highlight">build</span> today?</h1>
@@ -141,21 +142,7 @@ export default async function HomePage() {
               <h2 id="highlights-title" className="card__title">Campus highlights</h2>
             </div>
           </div>
-          {highlights.length ? highlights.map((highlight) => {
-            const student = getStudent(highlight.studentId);
-            if (!student) return null;
-            return (
-              <div key={highlight.id} className="highlight">
-                <Avatar studentId={student.id} name={student.name} />
-                <div className="highlight__copy">
-                  <Tag>{highlight.badge}</Tag>
-                  <p className="highlight__text">
-                    <Link href={`/students/${student.id}`}>{student.name}</Link> {highlight.text}
-                  </p>
-                </div>
-              </div>
-            );
-          }) : <p className="empty-note">No highlights yet. Your next win could be here.</p>}
+          <p className="empty-note">No highlights yet. Your next win could be here.</p>
         </Card>
         <TeammateCard />
       </section>

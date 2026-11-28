@@ -45,15 +45,20 @@ export default function CertificateVerifier({ initialId = '', initialResult = nu
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
       <form onSubmit={handleVerify} className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <label htmlFor="certificate-id-input" style={{ fontWeight: 700, fontSize: 16 }}>
-          Enter Certificate ID:
-        </label>
+        <div>
+          <label htmlFor="certificate-id-input" style={{ fontWeight: 700, fontSize: 16, display: 'block' }}>
+            Enter Certificate ID or Certificate Number:
+          </label>
+          <span style={{ fontSize: 12, opacity: 0.75 }}>
+            You can verify by either the Certificate ID (UUID) or the Certificate Number (e.g. CERT-123456).
+          </span>
+        </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <input
             id="certificate-id-input"
             type="text"
             className="input"
-            placeholder="e.g. 550e8400-e29b-41d4-a716-446655440000"
+            placeholder="e.g. CERT-849201 or 550e8400-e29b-41d4-a716-446655440000"
             value={certId}
             onChange={(e) => setCertId(e.target.value)}
             style={{ flex: '1 1 280px', fontFamily: 'monospace', fontSize: 14 }}
@@ -104,6 +109,13 @@ export default function CertificateVerifier({ initialId = '', initialResult = nu
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#166534' }}>RECIPIENT</div>
                   <div style={{ fontSize: 16, fontWeight: 800 }}>{result.attendeeName}</div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#166534' }}>CERTIFICATE NO.</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, fontFamily: 'monospace' }}>
+                    {result.certificateNumber || result.certificateId.slice(0, 8).toUpperCase()}
+                  </div>
                 </div>
 
                 <div>

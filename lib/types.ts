@@ -1,8 +1,8 @@
 export type EventType = 'event' | 'hackathon';
 export const EVENT_CATEGORIES = ['Hackathon', 'Workshop', 'Contest', 'Meetup', 'Sprint', 'Design jam'] as const;
 export type EventCategory = (typeof EVENT_CATEGORIES)[number];
-export const PUBLISHABLE_EVENT_CATEGORIES = ['Workshop', 'Contest', 'Meetup', 'Sprint', 'Design jam'] as const;
-export type PublishableEventCategory = (typeof PUBLISHABLE_EVENT_CATEGORIES)[number];
+export const PUBLISHABLE_EVENT_CATEGORIES = EVENT_CATEGORIES;
+export type PublishableEventCategory = EventCategory;
 export const EVENT_MODES = ['Online', 'Offline'] as const;
 export type EventMode = (typeof EVENT_MODES)[number];
 export const EVENT_LOCATIONS = ['In campus', 'Out of campus'] as const;
@@ -23,34 +23,72 @@ interface CampusEventBase {
   /** YYYY-MM-DD, last day to register */
   registrationDeadline: string;
   capacity: number;
-  registerUrl: string;
+  registerUrl?: string;
+  imageUrl?: string | null;
 }
 
 export type CampusEvent = CampusEventBase & (
   | { type: 'event' }
   | {
       type: 'hackathon';
-      teamSizeMin: number;
-      teamSizeMax: number;
-      theme: string;
-      prize: string;
-      rules: string[];
+      teamSizeMin?: number;
+      teamSizeMax?: number;
+      theme?: string;
+      prize?: string;
+      rules?: string[];
     }
 );
 
-export type NoticeboardCampusEvent = Omit<
-    Extract<CampusEvent, { type: 'event' }>,
-    'category'
-> & {
-    category: PublishableEventCategory;
-    description: string;
-    isPublished: boolean;
+export type NoticeboardCampusEvent = CampusEvent & {
+  description: string;
+  isPublished: boolean;
+  teamSizeMin?: number;
+  teamSizeMax?: number;
+  theme?: string;
+  prize?: string;
+  rules?: string[];
 };
 
-export type NoticeboardEventInput = Omit<
-    NoticeboardCampusEvent,
-    'id' | 'type' | 'registerUrl' | 'category'
-> & { category: PublishableEventCategory };
+export type NoticeboardEventInput = {
+  title: string;
+  type?: EventType;
+  category: EventCategory;
+  description: string;
+  mode: EventMode;
+  where: EventWhere;
+  place: string;
+  start: string;
+  end?: string;
+  registrationDeadline: string;
+  capacity: number;
+  isPublished: boolean;
+  imageUrl?: string | null;
+  teamSizeMin?: number | null;
+  teamSizeMax?: number | null;
+  theme?: string | null;
+  prize?: string | null;
+  rules?: string[];
+};
+
+export type TeamInvitationStatus = 'pending' | 'accepted' | 'declined';
+
+export type TeamInvitation = {
+  id: string;
+  teamId?: string;
+  teamName: string;
+  eventId?: string;
+  eventTitle?: string;
+  senderId: string;
+  senderName: string;
+  senderEmail: string;
+  receiverId: string;
+  receiverName: string;
+  receiverEmail: string;
+  message: string;
+  status: TeamInvitationStatus;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export interface Achievement {
   title: string;
@@ -62,6 +100,7 @@ export interface Student {
   id: string;
   name: string;
   handle: string;
+  email?: string;
   branch: string;
   year: string;
   bio: string;
@@ -73,6 +112,7 @@ export interface Student {
   going: string[];
   /** 0–100, only shown to the student themselves */
   profileCompleteness: number;
+  role?: 'organizer' | 'student';
 }
 
 export interface Highlight {
@@ -367,6 +407,7 @@ export interface ReportItem {
   reporterId: string;
   reporterName?: string;
   reporterEmail?: string;
+  targetAuthorId?: string;
   itemType: ReportItemType;
   itemId: string;
   itemTitle?: string;

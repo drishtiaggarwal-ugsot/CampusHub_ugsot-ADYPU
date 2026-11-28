@@ -1,81 +1,43 @@
 import 'server-only';
-import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase/server';
+import { createDbClient, isFirestoreConfigured } from '@/lib/db/client';
 import { getCurrentUser } from '@/lib/auth';
-import { events } from '@/lib/data';
+import { getPublishedNoticeboardEvents } from '@/lib/db/noticeboard-events';
 import type { Opportunity, OpportunityCategory } from '@/lib/types';
 import type { Database } from './database.types';
 
 type OpportunityRow = Database['public']['Tables']['opportunities']['Row'];
 
-// Fallback seed data in case Supabase table has not yet been populated
-const FALLBACK_OPPORTUNITIES: Opportunity[] = [
-  {
-    id: 'sample-opp-1',
-    title: '[SAMPLE] Google Summer of Code (GSoC) 2027 Open Source Mentorship',
-    organization: 'Google Open Source Programs Office',
-    category: 'Open-source programs',
-    description:
-      'Work with open-source organizations on a 12+ week programming project under the guidance of dedicated mentors. Stipend provided based on location.',
-    link: 'https://summerofcode.withgoogle.com',
-    deadline: new Date(Date.now() + 5 * 86400000).toISOString(),
-    location: 'Remote',
-    eligibility: 'Enrolled university students or open-source contributors aged 18+',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'sample-opp-2',
-    title: '[SAMPLE] ADYPU Innovation Lab Winter Software Intern',
-    organization: 'ADYPU Center for Innovation & Research',
-    category: 'Internships',
-    description:
-      'Join our student-led engineering team to build smart-campus IoT dashboards, web platforms, and automated attendance solutions. 3 months part-time.',
-    link: 'https://adypu.edu.in',
-    deadline: new Date(Date.now() + 14 * 86400000).toISOString(),
-    location: 'Pune Campus (Hybrid)',
-    eligibility: '2nd & 3rd Year B.Tech CSE / IT / AI-DS with React & Node experience',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'sample-opp-3',
-    title: '[SAMPLE] MLH Global Fellowship - Open Source Software Track',
-    organization: 'Major League Hacking (MLH)',
-    category: 'Fellowships',
-    description:
-      'A 12-week remote internship alternative where fellows contribute directly to production open-source repositories used by millions.',
-    link: 'https://fellowship.mlh.io',
-    deadline: new Date(Date.now() + 30 * 86400000).toISOString(),
-    location: 'Remote',
-    eligibility: 'All degree programs, demonstrable Git & programming fundamentals',
-    createdAt: new Date().toISOString(),
-  },
-];
-
 /**
  * Maps hackathons from events catalog into Opportunity format
  * so hackathons stay single-sourced from events!
  */
-function getHackathonOpportunities(): Opportunity[] {
-  return events
-    .filter((e) => e.type === 'hackathon')
-    .map((e) => {
-      const hackathon = e.type === 'hackathon' ? e : null;
-      return {
-        id: `event-${e.id}`,
-        title: e.title,
-        organization: 'CampusHub Dev Club',
-        category: 'Hackathons' as OpportunityCategory,
-        description: hackathon
-          ? `Official Campus Hackathon. Theme: ${hackathon.theme}. Team Size: ${hackathon.teamSizeMin}-${hackathon.teamSizeMax} members. Prize Pool: ${hackathon.prize}. Mode: ${e.mode} (${e.where}).`
-          : `Official Campus Hackathon. Mode: ${e.mode} (${e.where}).`,
-        link: `/events/${e.id}`,
-        deadline: new Date(`${e.registrationDeadline}T23:59:59Z`).toISOString(),
-        location: e.place,
-        eligibility: 'All ADYPU & partner college students',
-        isFromEvents: true,
-        eventUrl: `/events/${e.id}`,
-        createdAt: '2026-10-01T00:00:00Z',
-      };
-    });
+async function getHackathonOpportunities(): Promise<Opportunity[]> {
+  try {
+    const publishedEvents = await getPublishedNoticeboardEvents();
+    return publishedEvents
+      .filter((e) => e.type === 'hackathon')
+      .map((e) => {
+        const hackathon = e.type === 'hackathon' ? e : null;
+        return {
+          id: `event-${e.id}`,
+          title: e.title,
+          organization: 'CampusHub Dev Club',
+          category: 'Hackathons' as OpportunityCategory,
+          description: hackathon
+            ? `Official Campus Hackathon. Theme: ${hackathon.theme}. Team Size: ${hackathon.teamSizeMin}-${hackathon.teamSizeMax} members. Prize Pool: ${hackathon.prize}. Mode: ${e.mode} (${e.where}).`
+            : `Official Campus Hackathon. Mode: ${e.mode} (${e.where}).`,
+          link: `/events/${e.id}`,
+          deadline: new Date(`${e.registrationDeadline}T23:59:59Z`).toISOString(),
+          location: e.place,
+          eligibility: 'All ADYPU & partner college students',
+          isFromEvents: true,
+          eventUrl: `/events/${e.id}`,
+          createdAt: '2026-10-01T00:00:00Z',
+        };
+      });
+  } catch {
+    return [];
+  }
 }
 
 function computeClosingSoon(deadlineIso: string): boolean {
@@ -94,16 +56,16 @@ export async function getOpportunities(options?: {
   const currentUser = await getCurrentUser();
   let dbOpportunities: Opportunity[] = [];
 
-  if (isSupabaseConfigured()) {
+  if ((await isFirestoreConfigured())) {
     try {
-      const supabase = await createSupabaseServerClient();
+      const supabase = await createDbClient();
       const { data: rows, error } = await supabase
         .from('opportunities')
         .select('*')
         .order('deadline', { ascending: true });
 
       if (error || !rows || rows.length === 0) {
-        dbOpportunities = FALLBACK_OPPORTUNITIES;
+        dbOpportunities = [];
       } else {
         dbOpportunities = rows.map((r: OpportunityRow) => ({
           id: r.id,
@@ -121,22 +83,22 @@ export async function getOpportunities(options?: {
       }
     } catch (err) {
       console.error('Error fetching opportunities from DB:', err);
-      dbOpportunities = FALLBACK_OPPORTUNITIES;
+      dbOpportunities = [];
     }
   } else {
-    dbOpportunities = FALLBACK_OPPORTUNITIES;
+    dbOpportunities = [];
   }
 
   // Pull hackathons from events (Single Source of Truth)
-  const hackathons = getHackathonOpportunities();
+  const hackathons = await getHackathonOpportunities();
 
   // Combine and deduplicate
   let all = [...dbOpportunities, ...hackathons];
 
   // Fetch bookmarks for signed-in user
-  if (currentUser && isSupabaseConfigured()) {
+  if (currentUser && (await isFirestoreConfigured())) {
     try {
-      const supabase = await createSupabaseServerClient();
+      const supabase = await createDbClient();
       const { data: bookmarks } = await supabase
         .from('opportunity_bookmarks')
         .select('opportunity_id')
@@ -195,7 +157,7 @@ export async function createOpportunity(data: {
   location: string;
   eligibility: string;
 }): Promise<string> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
 
   if (currentUser?.role !== 'organizer') {
@@ -218,7 +180,7 @@ export async function createOpportunity(data: {
     .select('id')
     .single();
 
-  if (error) throw new Error(`Failed to create opportunity: ${error.message}`);
+  if (error || !row) throw new Error(`Failed to create opportunity: ${error?.message || 'Unknown error'}`);
   return row.id;
 }
 
@@ -235,7 +197,7 @@ export async function updateOpportunity(
     eligibility: string;
   }>,
 ): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
 
   if (currentUser?.role !== 'organizer') {
@@ -261,7 +223,7 @@ export async function updateOpportunity(
 }
 
 export async function deleteOpportunity(id: string): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
 
   if (currentUser?.role !== 'organizer') {
@@ -275,7 +237,7 @@ export async function deleteOpportunity(id: string): Promise<void> {
 export async function toggleOpportunityBookmark(
   opportunityId: string,
 ): Promise<{ isBookmarked: boolean }> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to bookmark opportunities.');
 
@@ -302,7 +264,7 @@ export async function toggleOpportunityBookmark(
 }
 
 export async function getMyBookmarkedOpportunities(): Promise<Opportunity[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) return [];
 

@@ -1375,7 +1375,8 @@ h3,
   transform: scale(1.5);
 }
 
-.magnetic {
+.magnetic,
+[data-magnetic] {
   transform: translate3d(var(--magnetic-x, 0px), var(--magnetic-y, 0px), 0);
   transition: transform 350ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -1583,8 +1584,17 @@ h3,
 }
 
 @media (max-width: 420px) {
+  .topbar .logo {
+    gap: 6px;
+    font-size: 13px;
+  }
+
   .topbar .logo > span {
-    display: none;
+    display: inline-block;
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -1695,18 +1705,50 @@ h3,
 }
 
 .tag,
-.chip,
+.chip:not(button),
 .badge,
 .skill-chip,
 .sticker {
-  border: 0 !important;
+  border: 0;
   border-radius: 6px;
-  background: var(--stone) !important;
-  color: var(--muted) !important;
+  background: var(--stone);
+  color: var(--muted);
   font: 500 12px/1.4 var(--font-jetbrains-mono), monospace;
   letter-spacing: 0;
   padding: 2px 8px;
   text-transform: none;
+}
+
+/* Interactive Filter Pill Buttons */
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 120ms ease;
+  user-select: none;
+  font-family: inherit;
+}
+
+.filter-pill:hover {
+  border-color: var(--ink);
+  background: var(--panel);
+}
+
+.filter-pill.is-active,
+.filter-pill[data-active="true"] {
+  background: var(--ink) !important;
+  color: var(--canvas) !important;
+  border-color: var(--ink) !important;
+  font-weight: 700;
 }
 
 .tg {

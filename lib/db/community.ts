@@ -1,5 +1,5 @@
 import 'server-only';
-import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase/server';
+import { createDbClient, isFirestoreConfigured } from '@/lib/db/client';
 import { getCurrentUser } from '@/lib/auth';
 import { checkUserPostingEligibility } from './moderation';
 import { createNotification } from './notifications';
@@ -14,75 +14,21 @@ export type CommunityTag = ForumTag;
 export { FORUM_TAGS };
 export { FORUM_TAGS as COMMUNITY_TAGS };
 
-// Built-in starter seed posts for instant usability
-const SAMPLE_POSTS: ForumPost[] = [
-  {
-    id: 'sample-post-1',
-    type: 'announcement',
-    title: 'Welcome to the UGSOT Community!',
-    content: 'This is our official campus community space for questions, tech discussions, code debugging, and project updates. Organizers will post official hackathon updates here.',
-    authorId: 'admin',
-    authorName: 'UGSOT Admin',
-    authorEmail: 'admin@adypu.edu.in',
-    tags: ['Web', 'Git'],
-    acceptedAnswerId: null,
-    isReported: false,
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    upvotesCount: 14,
-    answersCount: 1,
-    hasUpvoted: false,
-    canDelete: false,
-  },
-  {
-    id: 'sample-post-2',
-    type: 'question',
-    title: 'How do I resolve Next.js 16 Server Component vs "use client" context errors?',
-    content: 'I have an interactive form with state and onSubmit handlers inside an App Router page, but the production build failed prerendering because of it. What is the standard clean pattern to separate them?',
-    authorId: 'student-seed-1',
-    authorName: 'Aarav Patil',
-    authorEmail: 'student@adypu.edu.in',
-    tags: ['Web', 'JavaScript'],
-    acceptedAnswerId: 'sample-ans-1',
-    isReported: false,
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000).toISOString(),
-    upvotesCount: 9,
-    answersCount: 2,
-    hasUpvoted: false,
-    canDelete: false,
-  },
-  {
-    id: 'sample-post-3',
-    type: 'discussion',
-    title: 'Best Python ML libraries for our Smart Campus Ideathon project?',
-    content: 'We are designing an automated energy efficiency prototype. We are debating between scikit-learn vs PyTorch lightweight models. What do seniors recommend for fast inference on Raspberry Pi?',
-    authorId: 'sneha-user-id',
-    authorName: 'Sneha Kulkarni',
-    authorEmail: 'sneha@adypu.edu.in',
-    tags: ['Python', 'AI/ML'],
-    acceptedAnswerId: null,
-    isReported: false,
-    createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-    updatedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-    upvotesCount: 7,
-    answersCount: 1,
-    hasUpvoted: false,
-    canDelete: false,
-  },
-];
+// Built-in starter collections are empty to ensure all rendered community data is genuine from Cloud Firestore
+const SAMPLE_POSTS: ForumPost[] = [];
+const SAMPLE_ANSWERS: Record<string, ForumAnswer[]> = {};
 
 export async function getForumPosts(options?: {
   type?: ForumPostType;
   tag?: string;
   search?: string;
 }): Promise<ForumPost[]> {
-  if (!isSupabaseConfigured()) {
+  if (!(await isFirestoreConfigured())) {
     return filterSamplePosts(SAMPLE_POSTS, options);
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const currentUser = await getCurrentUser();
 
     let query = supabase.from('forum_posts').select('*').order('created_at', { ascending: false });
@@ -101,7 +47,6 @@ export async function getForumPosts(options?: {
     }
 
     if (posts.length === 0) {
-      // If table exists but empty, return sample posts matching criteria
       return filterSamplePosts(SAMPLE_POSTS, options);
     }
 
@@ -194,7 +139,7 @@ function filterSamplePosts(
     list = list.filter((p) => p.type === options.type);
   }
   if (options?.tag && options.tag !== 'All') {
-    list = list.filter((p) => p.tags.includes(options.tag!));
+    list = list.filter((p) => p.tags.some((t) => t.toLowerCase() === options.tag!.toLowerCase()));
   }
   if (options?.search && options.search.trim()) {
     const term = options.search.trim().toLowerCase();
@@ -211,7 +156,7 @@ function filterSamplePosts(
 export async function getForumPostWithAnswers(
   postId: string,
 ): Promise<{ post: ForumPost; answers: ForumAnswer[] } | null> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   const isOrganizer = currentUser?.role === 'organizer';
 
@@ -223,29 +168,12 @@ export async function getForumPostWithAnswers(
     .maybeSingle();
 
   if (postErr || !postRow) {
-    const fallback = SAMPLE_POSTS.find((p) => p.id === postId);
-    if (!fallback) return null;
-    return {
-      post: fallback,
-      answers: [
-        {
-          id: 'sample-ans-1',
-          postId,
-          authorId: 'expert-1',
-          authorName: 'Rohan Deshmukh',
-          authorEmail: 'rohan@adypu.edu.in',
-          content: 'Move the `<form>` and its state into a separate file marked with `"use client"`. Import that into your page.tsx Server Component. Keep metadata on the Server Component!',
-          isAccepted: true,
-          isReported: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          upvotesCount: 5,
-          hasUpvoted: false,
-          canDelete: false,
-          canAccept: false,
-        },
-      ],
-    };
+    const sample = SAMPLE_POSTS.find((p) => p.id === postId);
+    if (sample) {
+      const answers = SAMPLE_ANSWERS[postId] || [];
+      return { post: sample, answers };
+    }
+    return null;
   }
 
   // Fetch author profile
@@ -356,7 +284,7 @@ export async function createForumPost(post: {
   content: string;
   tags: string[];
 }): Promise<string> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to create a post.');
 
@@ -382,12 +310,12 @@ export async function createForumPost(post: {
     .select('id')
     .single();
 
-  if (error) throw new Error(`Failed to create post: ${error.message}`);
+  if (error || !data) throw new Error(`Failed to create post: ${error?.message || 'Unknown error'}`);
   return data.id;
 }
 
 export async function createForumAnswer(postId: string, content: string): Promise<string> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to reply.');
 
@@ -407,7 +335,7 @@ export async function createForumAnswer(postId: string, content: string): Promis
     .select('id')
     .single();
 
-  if (error) throw new Error(`Failed to submit reply: ${error.message}`);
+  if (error || !data) throw new Error(`Failed to submit reply: ${error?.message || 'Unknown error'}`);
 
   // Notify question author about the new answer
   try {
@@ -438,7 +366,7 @@ export async function toggleUpvote(
   itemType: 'post' | 'answer',
   itemId: string,
 ): Promise<{ upvoted: boolean; count: number }> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to upvote.');
 
@@ -458,11 +386,14 @@ export async function toggleUpvote(
       .eq('item_type', itemType)
       .eq('item_id', itemId);
   } else {
-    await supabase.from('forum_upvotes').insert({
-      user_id: currentUser.id,
-      item_type: itemType,
-      item_id: itemId,
-    });
+    await supabase.from('forum_upvotes').upsert(
+      {
+        user_id: currentUser.id,
+        item_type: itemType,
+        item_id: itemId,
+      },
+      { onConflict: 'user_id,item_type,item_id' },
+    );
   }
 
   const { data: total } = await supabase
@@ -475,7 +406,7 @@ export async function toggleUpvote(
 }
 
 export async function acceptAnswer(postId: string, answerId: string): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to accept an answer.');
 
@@ -520,18 +451,40 @@ export async function acceptAnswer(postId: string, answerId: string): Promise<vo
 }
 
 export async function deleteForumPost(postId: string): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('Unauthorized');
+
+  const { data: post } = await supabase
+    .from('forum_posts')
+    .select('id, author_id')
+    .eq('id', postId)
+    .maybeSingle();
+
+  if (!post) throw new Error('Post not found');
+  if (post.author_id !== currentUser.id && currentUser.role !== 'organizer') {
+    throw new Error('Forbidden: You can only delete your own posts.');
+  }
 
   const { error } = await supabase.from('forum_posts').delete().eq('id', postId);
   if (error) throw new Error(`Failed to delete post: ${error.message}`);
 }
 
 export async function deleteForumAnswer(answerId: string): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('Unauthorized');
+
+  const { data: answer } = await supabase
+    .from('forum_answers')
+    .select('id, author_id')
+    .eq('id', answerId)
+    .maybeSingle();
+
+  if (!answer) throw new Error('Answer not found');
+  if (answer.author_id !== currentUser.id && currentUser.role !== 'organizer') {
+    throw new Error('Forbidden: You can only delete your own answers.');
+  }
 
   const { error } = await supabase.from('forum_answers').delete().eq('id', answerId);
   if (error) throw new Error(`Failed to delete answer: ${error.message}`);
@@ -542,16 +495,27 @@ export async function reportForumItem(
   itemId: string,
   reason = 'Flagged by user',
 ): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to report content.');
 
-  await supabase.from('forum_reports').insert({
-    reporter_id: currentUser.id,
-    item_type: itemType,
-    item_id: itemId,
-    reason,
-  });
+  const reportItemType = itemType === 'post' ? 'forum_post' : 'forum_answer';
+  await Promise.all([
+    supabase.from('forum_reports').insert({
+      reporter_id: currentUser.id,
+      item_type: itemType,
+      item_id: itemId,
+      reason,
+    }),
+    supabase.from('reports').insert({
+      reporter_id: currentUser.id,
+      item_type: reportItemType,
+      item_id: itemId,
+      reason: reason.trim().slice(0, 200) || 'Flagged by user',
+      details: null,
+      status: 'pending',
+    }),
+  ]);
 
   const table = itemType === 'post' ? 'forum_posts' : 'forum_answers';
   await supabase.from(table).update({ is_reported: true }).eq('id', itemId);

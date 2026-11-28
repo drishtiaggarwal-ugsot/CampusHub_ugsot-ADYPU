@@ -1,5 +1,5 @@
 import 'server-only';
-import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase/server';
+import { createDbClient, isFirestoreConfigured } from '@/lib/db/client';
 import { getCurrentUser } from '@/lib/auth';
 import type {
   LeaderboardEntry,
@@ -43,7 +43,7 @@ export async function getLeaderboardEntries(options?: {
   limit?: number;
   offset?: number;
 }): Promise<LeaderboardEntry[]> {
-  if (!isSupabaseConfigured()) {
+  if (!(await isFirestoreConfigured())) {
     return [];
   }
 
@@ -54,7 +54,7 @@ export async function getLeaderboardEntries(options?: {
   const search = options?.search ? options.search.trim().toLowerCase() : '';
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { data, error } = await supabase.rpc('get_leaderboard', {
       p_time_filter: timeFilter,
       p_category_filter: categoryFilter,
@@ -108,12 +108,12 @@ export async function getUserLeaderboardPosition(
   timeFilter: LeaderboardTimeFilter = 'all',
   categoryFilter: LeaderboardCategoryFilter = 'overall'
 ): Promise<UserLeaderboardPosition | null> {
-  if (!isSupabaseConfigured() || !userId) {
+  if (!(await isFirestoreConfigured()) || !userId) {
     return null;
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { data, error } = await supabase.rpc('get_user_leaderboard_position', {
       p_user_id: userId,
       p_time_filter: timeFilter,
@@ -143,12 +143,12 @@ export async function getUserLeaderboardPosition(
  * Retrieve point rules from the database or default rules fallback.
  */
 export async function getPointRules(): Promise<PointRuleItem[]> {
-  if (!isSupabaseConfigured()) {
+  if (!(await isFirestoreConfigured())) {
     return DEFAULT_POINT_RULES;
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { data, error } = await supabase
       .from('point_rules')
       .select('action_key, points, category, description')
@@ -181,12 +181,12 @@ export async function toggleUserLeaderboardVisibility(
     return { success: false, error: 'Unauthorized: Only organizers can moderate leaderboard visibility.' };
   }
 
-  if (!isSupabaseConfigured()) {
-    return { success: false, error: 'Supabase is not configured.' };
+  if (!(await isFirestoreConfigured())) {
+    return { success: false, error: 'Firestore is not configured.' };
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { error } = await supabase
       .from('profiles')
       .update({ is_hidden_from_leaderboard: isHidden })

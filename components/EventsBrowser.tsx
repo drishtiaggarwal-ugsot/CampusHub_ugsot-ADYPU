@@ -81,13 +81,31 @@ export default function EventsBrowser({
             <div className="event-grid">
               {upcoming.map((e) => (
                 <article id={`event-${e.id}`} key={e.id} className="event-card">
+                  {e.imageUrl && (
+                    <div
+                      style={{
+                        width: 'calc(100% + 40px)',
+                        margin: '-20px -20px 10px -20px',
+                        height: 160,
+                        overflow: 'hidden',
+                        borderRadius: '8px 8px 0 0',
+                        background: 'var(--border, #eee)',
+                      }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={e.imageUrl}
+                        alt={e.title}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        loading="lazy"
+                      />
+                    </div>
+                  )}
                   <div className="event-card__top">
                     <EventDateBlock event={e} variant="card" />
                     <div style={{ minWidth: 0 }}>
                       <h2 className="event-card__title">
-                        {e.type === 'hackathon'
-                          ? <Link href={`/events/${e.id}`} className="event-card__title-link">{e.title}</Link>
-                          : e.title}
+                        <Link href={`/events/${e.id}`} className="event-card__title-link">{e.title}</Link>
                       </h2>
                       <p className="event-card__place">{e.place}</p>
                     </div>
@@ -109,6 +127,15 @@ export default function EventsBrowser({
                           style={{ fontSize: 13, padding: '6px 12px', minHeight: 36 }}
                         >
                           📋 Attendance
+                        </Link>
+                      )}
+                      {statusesByEvent.get(e.id)?.isRegistered && (
+                        <Link
+                          href={`/events/${e.id}#team-registration-title`}
+                          className="btn btn--outline"
+                          style={{ fontSize: 13, padding: '6px 12px', minHeight: 36 }}
+                        >
+                          🤝 Team & Invites
                         </Link>
                       )}
                       <EventRegistrationControl event={e} status={statusesByEvent.get(e.id)}

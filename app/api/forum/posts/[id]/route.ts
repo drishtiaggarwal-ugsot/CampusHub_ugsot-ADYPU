@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { deleteForumPost, getForumPostWithAnswers } from '@/lib/db/community';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -22,9 +23,6 @@ export async function DELETE(request: Request, context: RouteContext) {
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('Error deleting post:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to delete post' },
-      { status: 403 },
-    );
+    return apiErrorResponse(err, 'Failed to delete post');
   }
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { AuthServiceError, signUp } from '@/lib/auth';
+import { AuthServiceError, SESSION_COOKIE_NAME, signUp } from '@/lib/auth';
 import { isStringRecord, validateSignUp } from '@/lib/validation';
 
 export async function POST(request: Request) {
@@ -16,16 +16,21 @@ export async function POST(request: Request) {
   if (Object.keys(errors).length) return NextResponse.json({ errors }, { status: 400 });
 
   try {
-    const result = await signUp(name, email, password, courseYear);
-    return NextResponse.json({ success: true, ...result });
+    const { confirmationRequired, idToken } = await signUp(name, email, password, courseYear);
+    const response = NextResponse.json({ success: true, confirmationRequired });
+    response.cookies.set(SESSION_COOKIE_NAME, idToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    return response;
   } catch (error) {
     if (error instanceof AuthServiceError) {
       return NextResponse.json({ form: error.message }, { status: error.status });
     }
-    if (error instanceof Error && error.message.startsWith('Supabase is not configured.')) {
-      return NextResponse.json({ form: error.message }, { status: 503 });
-    }
-    console.error('Unable to register with Supabase.', error);
+    console.error('Unable to register with Firebase.', error);
     return NextResponse.json({ form: 'Registration is temporarily unavailable. Please try again.' }, { status: 503 });
   }
 }

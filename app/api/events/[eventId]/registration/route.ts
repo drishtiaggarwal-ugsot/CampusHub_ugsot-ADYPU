@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getEvent } from '@/lib/data';
 import {
   cancelEventRegistration,
   EventRegistrationError,
+  findEventMeta,
   registerForEvent,
 } from '@/lib/db/events';
 
@@ -10,7 +10,7 @@ type RouteContext = { params: Promise<{ eventId: string }> };
 
 export async function POST(_request: Request, context: RouteContext) {
   const { eventId } = await context.params;
-  if (!getEvent(eventId)) {
+  if (!(await findEventMeta(eventId))) {
     return NextResponse.json({ form: 'This event is not available.' }, { status: 404 });
   }
 
@@ -31,7 +31,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
 export async function DELETE(_request: Request, context: RouteContext) {
   const { eventId } = await context.params;
-  if (!getEvent(eventId)) {
+  if (!(await findEventMeta(eventId))) {
     return NextResponse.json({ form: 'This event is not available.' }, { status: 404 });
   }
 

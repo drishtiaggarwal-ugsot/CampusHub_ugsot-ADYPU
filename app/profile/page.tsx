@@ -3,13 +3,14 @@ import ProfileView from '@/components/ProfileView';
 import SignOutButton from '@/components/auth/SignOutButton';
 import Card from '@/components/ui/Card';
 import { getCurrentUser } from '@/lib/auth';
-import { students } from '@/lib/data';
 import type { Student } from '@/lib/types';
 import { getMyEventRegistrations, getMyCertificates, type MyEventRegistration, type UserCertificate } from '@/lib/db/events';
 import { getMyBookmarkedProjects } from '@/lib/db/projects';
+import { getMyTeamInvitations } from '@/lib/db/teams';
 import { getUserDashboardData, type DashboardStats } from '@/lib/db/dashboard';
-import type { Project } from '@/lib/types';
+import type { Project, TeamInvitation } from '@/lib/types';
 
+export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Your profile · CampusHub · UGSOT' };
 
 export default async function MyProfilePage() {
@@ -39,30 +40,24 @@ export default async function MyProfilePage() {
   }
 
   const handle = currentUser.email.split('@')[0];
-  const matchedStudent = students.find(
-    (s) => s.handle.toLowerCase() === handle.toLowerCase() || s.name.toLowerCase() === currentUser.name.toLowerCase()
-  );
-
-  const profileData: Student = matchedStudent ? {
-    ...matchedStudent,
-    name: currentUser.name || matchedStudent.name,
-    bio: currentUser.bio || matchedStudent.bio,
-    skills: currentUser.skills && currentUser.skills.length > 0 ? currentUser.skills : matchedStudent.skills,
-  } : {
-    id: handle,
-    name: currentUser.name,
+  const profileData: Student = {
+    id: currentUser.id,
+    name: currentUser.name || handle,
     handle,
-    branch: 'CSE',
+    branch: currentUser.courseYear ? currentUser.courseYear.split(' ')[0] : 'CSE',
     year: currentUser.courseYear || '3rd year',
-    bio: currentUser.bio || 'Student at UGSOT ADYPU learning, building, and contributing in the open.',
-    skills: currentUser.skills && currentUser.skills.length > 0 ? currentUser.skills : ['React', 'TypeScript', 'Git', 'Open Source'],
-    lookingForTeam: true,
-    links: { linkedin: '', github: currentUser.githubUsername ? `github.com/${currentUser.githubUsername}` : '', x: '', portfolio: '' },
-    achievements: [
-      { title: 'Joined CampusHub', date: 'Nov 2026', verified: true }
-    ],
-    going: ['campus-hackathon'],
-    profileCompleteness: 85,
+    bio: currentUser.bio || '',
+    skills: currentUser.skills && currentUser.skills.length > 0 ? currentUser.skills : [],
+    lookingForTeam: currentUser.lookingForTeam ?? true,
+    links: {
+      linkedin: '',
+      github: currentUser.githubUsername ? `github.com/${currentUser.githubUsername}` : '',
+      x: '',
+      portfolio: '',
+    },
+    achievements: [],
+    going: [],
+    profileCompleteness: 60,
   };
 
   let registrations: MyEventRegistration[] = [];
@@ -95,23 +90,37 @@ export default async function MyProfilePage() {
     console.error('Unable to load dashboard stats:', error);
   }
 
+  let initialInvitations: { received: TeamInvitation[]; sent: TeamInvitation[] } = { received: [], sent: [] };
+  try {
+    initialInvitations = await getMyTeamInvitations();
+  } catch (error) {
+    console.error('Unable to load team invitations:', error);
+  }
+
   return (
     <main className="container page profile-page">
-      <div className="profile-page__heading">
-        <Link href="/students" className="back-link">← All students</Link>
-        <p className="eyebrow">Your CampusHub profile</p>
-        <p className="profile-page__note">Give classmates a quick sense of what you’re learning and building.</p>
-        <SignOutButton />
+      <div className="profile-page__heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, marginBottom: 20 }}>
+        <div>
+          <Link href="/students" className="back-link">← All students</Link>
+          <p className="eyebrow" style={{ marginTop: 8 }}>Your CampusHub profile</p>
+          <h1 className="hero__title" style={{ fontSize: 32, margin: '4px 0 6px', fontWeight: 800 }}>Student Profile</h1>
+          <p className="profile-page__note">Showcase what you’re building, manage your squad invites, and connect with peers.</p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8 }}>
+          <SignOutButton />
+        </div>
       </div>
       <ProfileView
         student={profileData}
         isOwn
+        currentUserEmail={currentUser.email}
         registrations={registrations}
         registrationsError={registrationsError}
         certificates={certificates}
         bookmarkedProjects={bookmarkedProjects}
         dashboardStats={dashboardStats}
         initialGithubUsername={currentUser.githubUsername}
+        initialInvitations={initialInvitations}
       />
     </main>
   );

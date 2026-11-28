@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
-import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase/server';
+import { getCurrentUser, getSessionIdToken } from '@/lib/auth';
+import { firestoreSetDoc, isFirestoreAvailable } from '@/lib/db/firestore-rest';
 
 export async function POST(request: Request) {
   try {
@@ -12,22 +12,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null);
     const { fullName, courseYear, skills, interests, goals, githubUsername, skip } = body || {};
 
-    if (!isSupabaseConfigured()) {
-      return NextResponse.json({ success: true, simulated: true });
-    }
-
-    const supabase = await createSupabaseServerClient();
-
-    const payload: {
-      onboarding_completed: boolean;
-      updated_at: string;
-      full_name?: string;
-      course_year?: string;
-      skills?: string[];
-      interests?: string[];
-      goals?: string[];
-      github_username?: string | null;
-    } = {
+    const payload: Record<string, unknown> = {
       onboarding_completed: true,
       updated_at: new Date().toISOString(),
     };
@@ -35,39 +20,20 @@ export async function POST(request: Request) {
     if (!skip) {
       if (typeof fullName === 'string' && fullName.trim()) payload.full_name = fullName.trim();
       if (typeof courseYear === 'string' && courseYear.trim()) payload.course_year = courseYear.trim();
-      if (Array.isArray(skills)) payload.skills = skills.map((s) => String(s).trim()).filter(Boolean);
-      if (Array.isArray(interests)) payload.interests = interests.map((i) => String(i).trim()).filter(Boolean);
-      if (Array.isArray(goals)) payload.goals = goals.map((g) => String(g).trim()).filter(Boolean);
+      if (Array.isArray(skills)) payload.skills = skills.map((s: unknown) => String(s).trim()).filter(Boolean);
+      if (Array.isArray(interests)) payload.interests = interests.map((i: unknown) => String(i).trim()).filter(Boolean);
+      if (Array.isArray(goals)) payload.goals = goals.map((g: unknown) => String(g).trim()).filter(Boolean);
       if (typeof githubUsername === 'string') {
         payload.github_username = githubUsername.trim().replace(/^@/, '') || null;
       }
     }
 
-    // Sync to user metadata
-    try {
-      await supabase.auth.updateUser({
-        data: {
-          onboarding_completed: true,
-          ...(payload.full_name ? { full_name: payload.full_name } : {}),
-          ...(payload.course_year ? { course_year: payload.course_year } : {}),
-          ...(payload.skills ? { skills: payload.skills } : {}),
-          ...(payload.interests ? { interests: payload.interests } : {}),
-          ...(payload.goals ? { goals: payload.goals } : {}),
-          ...(payload.github_username !== undefined ? { github_username: payload.github_username } : {}),
-        },
-      });
-    } catch {
-      // Continue
-    }
-
-    // Update profiles table
-    const { error } = await supabase
-      .from('profiles')
-      .update(payload)
-      .eq('id', currentUser.id);
-
-    if (error) {
-      console.warn(`Profile update warning in onboarding: ${error.message}`);
+    const idToken = await getSessionIdToken();
+    if (await isFirestoreAvailable(idToken)) {
+      const res = await firestoreSetDoc('profiles', currentUser.id, payload, idToken, true);
+      if (!res.ok) {
+        console.warn('Profile update warning in onboarding:', res.error);
+      }
     }
 
     return NextResponse.json({ success: true });

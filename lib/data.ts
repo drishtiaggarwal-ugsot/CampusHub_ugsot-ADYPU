@@ -1,63 +1,31 @@
 /**
- * Sample data for the MVP. Swap these arrays for database queries
- * (e.g. Supabase or Firebase) once the backend is ready.
+ * Application data types and fallbacks.
+ * CampusHub runs purely on real data from Cloud Firestore.
  */
 import type { CampusEvent, Highlight, Post, Student } from './types';
 
 export const CURRENT_USER_ID = 'student-dev';
 
-export const events: CampusEvent[] = [
-  { id: 'freshers-talk', title: 'Freshers’ tech talk', type: 'event', category: 'Meetup', mode: 'Offline', where: 'In campus', place: 'Seminar Hall, Block A', start: '2026-10-17', registrationDeadline: '2026-10-16', capacity: 120, registerUrl: '#' },
-  { id: 'smart-campus-ideathon', title: 'Smart campus ideathon', type: 'hackathon', category: 'Hackathon', mode: 'Offline', where: 'In campus', place: 'Innovation Lab', start: '2026-10-24', end: '2026-10-25', registrationDeadline: '2026-10-20', capacity: 60, teamSizeMin: 1, teamSizeMax: 4, theme: 'To be announced', prize: 'To be announced', rules: [], registerUrl: '#' },
-  { id: 'git-workshop', title: 'Intro to Git & GitHub', type: 'event', category: 'Workshop', mode: 'Offline', where: 'In campus', place: 'Seminar Hall, Block A', start: '2026-11-04', registrationDeadline: '2026-11-03', capacity: 40, registerUrl: '#' },
-  { id: 'oss-sprint', title: 'Open-source sprint', type: 'event', category: 'Sprint', mode: 'Online', where: 'Out of campus', place: 'Online, Discord', start: '2026-11-07', registrationDeadline: '2026-11-06', capacity: 60, registerUrl: '#' },
-  { id: 'design-jam', title: 'UI/UX Design Jam', type: 'event', category: 'Design jam', mode: 'Online', where: 'Out of campus', place: 'Online', start: '2026-11-11', registrationDeadline: '2026-11-09', capacity: 30, registerUrl: '#' },
-  { id: 'campus-hackathon', title: 'Campus Hackathon 2026', type: 'hackathon', category: 'Hackathon', mode: 'Offline', where: 'In campus', place: 'Main Auditorium', start: '2026-11-14', end: '2026-11-15', registrationDeadline: '2026-11-10', capacity: 100, teamSizeMin: 1, teamSizeMax: 4, theme: 'To be announced', prize: 'To be announced', rules: [], registerUrl: '#' },
-  { id: 'rapid-prototyping-workshop', title: 'Rapid Prototyping Workshop', type: 'event', category: 'Workshop', mode: 'Offline', where: 'In campus', place: 'Innovation Lab', start: '2026-11-14', registrationDeadline: '2026-11-13', capacity: 30, registerUrl: '#' },
-  { id: 'student-maker-meetup', title: 'Student Maker Meetup', type: 'event', category: 'Meetup', mode: 'Offline', where: 'In campus', place: 'Project Studio', start: '2026-11-14', end: '2026-11-15', registrationDeadline: '2026-11-13', capacity: 50, registerUrl: '#' },
-  { id: 'ml-circle', title: 'ML Paper Reading Circle', type: 'event', category: 'Meetup', mode: 'Offline', where: 'In campus', place: 'Library, Room 2', start: '2026-11-18', registrationDeadline: '2026-11-17', capacity: 25, registerUrl: '#' },
-  { id: 'codefest', title: 'Inter-college Codefest', type: 'event', category: 'Contest', mode: 'Offline', where: 'Out of campus', place: 'Pune Tech Campus Auditorium, Pune', start: '2026-11-21', registrationDeadline: '2026-11-15', capacity: 200, registerUrl: '#' },
-  { id: 'resume-clinic', title: 'Resume & LinkedIn clinic', type: 'event', category: 'Workshop', mode: 'Offline', where: 'In campus', place: 'Placement Cell', start: '2026-11-25', registrationDeadline: '2026-11-24', capacity: 40, registerUrl: '#' },
-  { id: 'global-ai-hackathon', title: 'Global AI Hackathon', type: 'hackathon', category: 'Hackathon', mode: 'Online', where: 'Out of campus', place: 'Online', start: '2026-11-27', end: '2026-11-29', registrationDeadline: '2026-11-20', capacity: 200, teamSizeMin: 1, teamSizeMax: 4, theme: 'To be announced', prize: 'To be announced', rules: [], registerUrl: '#' },
-];
+export const events: CampusEvent[] = [];
 
-const links = { linkedin: '', github: 'github.com/campus-hub', x: '', portfolio: '' };
+export const students: Student[] = [];
 
-export const students: Student[] = [
-  {
-    id: 'aarav', name: 'Aarav Patil', handle: 'aaravp', branch: 'CSE', year: '3rd year',
-    bio: 'Full-stack dev who likes shipping small tools fast. Looking for an ML person for Campus Hackathon 2026.',
-    skills: ['React', 'Node.js', 'TypeScript', 'PostgreSQL', 'Figma', 'Tailwind'], lookingForTeam: true, links,
-    achievements: [
-      { title: 'Finalist, Smart campus ideathon', date: 'Oct 2026', verified: true },
-      { title: 'Built the attendance tracker used by the CSE dept.', date: 'Jul 2026' },
-    ],
-    going: ['campus-hackathon', 'git-workshop'], profileCompleteness: 80,
-  },
-  { id: 'sneha', name: 'Sneha Kulkarni', handle: 'snehak', branch: 'AI & DS', year: '2nd year', bio: 'ML and data pipelines.', skills: ['Python', 'ML', 'Pandas'], lookingForTeam: true, links, achievements: [{ title: '2nd place, inter-college ML challenge', date: 'Oct 2026', verified: true }], going: ['global-ai-hackathon'], profileCompleteness: 70 },
-  { id: 'rohan', name: 'Rohan Deshmukh', handle: 'rohand', branch: 'CSE', year: '4th year', bio: 'Infra and backend.', skills: ['Go', 'Docker', 'Kubernetes'], lookingForTeam: false, links, achievements: [{ title: 'First open-source PR merged', date: 'Oct 2026' }], going: ['oss-sprint'], profileCompleteness: 90 },
-  { id: 'isha', name: 'Isha Joshi', handle: 'ishaj', branch: 'IT', year: '2nd year', bio: 'Product design and prototyping.', skills: ['Figma', 'UI/UX', 'Webflow'], lookingForTeam: false, links, achievements: [{ title: 'Best UI, 24-hour design jam', date: 'Oct 2026', verified: true }], going: ['design-jam'], profileCompleteness: 85 },
-  { id: 'kabir', name: 'Kabir Shaikh', handle: 'kabirs', branch: 'CSE', year: '3rd year', bio: 'Mobile apps with Flutter.', skills: ['Flutter', 'Firebase', 'Dart'], lookingForTeam: true, links, achievements: [], going: ['campus-hackathon'], profileCompleteness: 60 },
-  { id: 'meera', name: 'Meera Iyer', handle: 'meerai', branch: 'AI & DS', year: '3rd year', bio: 'Deep learning research.', skills: ['ML', 'PyTorch', 'Python'], lookingForTeam: false, links, achievements: [], going: ['ml-circle'], profileCompleteness: 75 },
-  { id: 'arjun', name: 'Arjun Nair', handle: 'arjunn', branch: 'CSE', year: '1st year', bio: 'Competitive programming.', skills: ['C++', 'DSA'], lookingForTeam: true, links, achievements: [], going: ['codefest'], profileCompleteness: 50 },
-  { id: 'tanvi', name: 'Tanvi More', handle: 'tanvim', branch: 'IT', year: '4th year', bio: 'Frontend engineering.', skills: ['React', 'TypeScript', 'Next.js'], lookingForTeam: false, links, achievements: [], going: [], profileCompleteness: 65 },
-  { id: 'dev', name: 'Dev Mehta', handle: 'devm', branch: 'CSE', year: '2nd year', bio: 'Backend with Django.', skills: ['Python', 'Django', 'Flutter'], lookingForTeam: true, links, achievements: [], going: [], profileCompleteness: 55 },
-];
+export const highlights: Highlight[] = [];
 
-export const highlights: Highlight[] = [
-  { id: 'h1', studentId: 'sneha', text: 'placed 2nd at an inter-college ML challenge.', badge: 'Podium' },
-  { id: 'h2', studentId: 'rohan', text: 'got his first open-source pull request merged.', badge: 'First PR' },
-  { id: 'h3', studentId: 'isha', text: 'won Best UI at a 24-hour design jam.', badge: 'Award' },
-];
+export const posts: Post[] = [];
 
-export const posts: Post[] = [
-  { id: 'p1', tag: 'Find teammate', authorId: 'kabir', createdAt: '2026-10-30T11:00:00+05:30', title: 'Need a backend dev for Campus Hackathon 2026', body: 'Team of 3 so far (Flutter + design). Looking for someone comfortable with Node or Django.', score: 14, replies: 6, eventId: 'campus-hackathon' },
-  { id: 'p2', tag: 'Need help', authorId: 'dev', createdAt: '2026-10-30T09:00:00+05:30', title: 'Firebase auth keeps logging me out on refresh', body: 'Using the web SDK with React. The user is null for a moment on every reload. What am I missing?', score: 8, replies: 3 },
-  { id: 'p3', tag: 'Ask', authorId: 'arjun', createdAt: '2026-10-29T18:00:00+05:30', title: 'Which electives are best for an ML track?', body: 'First year here. Seniors, which electives actually helped you?', score: 21, replies: 9 },
-  { id: 'p4', tag: 'Showcase', authorId: 'isha', createdAt: '2026-10-29T15:00:00+05:30', title: 'Redesigned our canteen menu app, feedback welcome', body: 'Figma link in comments. Mostly worked on the ordering flow.', score: 17, replies: 5 },
-  { id: 'p5', tag: 'Find teammate', authorId: 'sneha', createdAt: '2026-10-28T12:00:00+05:30', title: 'ML person looking for a team for Global AI Hackathon', body: 'Comfortable with PyTorch and data pipelines. Would love a frontend + backend pair.', score: 11, replies: 4, eventId: 'global-ai-hackathon' },
-];
+export const getStudent = (id: string): Student | undefined =>
+  students.find((s) => s.id === id);
 
-export const getStudent = (id: string) => students.find((s) => s.id === id);
-export const getEvent = (id: string) => events.find((e) => e.id === id);
-export const studentIndex = (id: string) => Math.max(0, students.findIndex((s) => s.id === id));
+export const getEvent = (id: string): CampusEvent | undefined =>
+  events.find((e) => e.id === id);
+
+export const studentIndex = (id: string): number => {
+  if (!id) return 0;
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash << 5) - hash + id.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+};

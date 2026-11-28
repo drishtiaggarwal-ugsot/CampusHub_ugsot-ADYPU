@@ -21,11 +21,16 @@ export default function NavBar({ currentUser }: Props) {
   const [unreadCount, setUnreadCount] = useState(0);
   const indexOpen = openIndexPath === pathname;
   const visibleUnreadCount = currentUser ? unreadCount : 0;
+  const isOrganizer =
+    currentUser?.role === 'organizer' ||
+    currentUser?.email?.toLowerCase() === 'sahildehadray157@gmail.com';
+
   const headerLinks = [
     { href: '/projects', label: 'Projects' },
     { href: '/events', label: 'Events' },
     { href: '/students', label: 'Students' },
     { href: '/community', label: 'Community' },
+    ...(isOrganizer ? [{ href: '/admin', label: 'Admin Panel' }] : []),
   ];
 
   useEffect(() => {
@@ -64,7 +69,22 @@ export default function NavBar({ currentUser }: Props) {
     <>
       <header className="topbar">
         <GlassPanel className="topbar__inner">
-          <Link href="/" className="logo" aria-label="UGSOT Campus Hub home">
+          <Link
+            href="/welcome#hero"
+            className="logo"
+            aria-label="UGSOT Campus Hub welcome"
+            onClick={(e) => {
+              if (pathname === '/welcome') {
+                e.preventDefault();
+                const hero = document.getElementById('hero');
+                if (hero) {
+                  hero.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } else {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }
+            }}
+          >
             <LiquidLogo size={32} allowShader={pathname !== '/profile' && pathname !== '/dev/effects'} />
             <span>UGSOT Campus Hub</span>
           </Link>

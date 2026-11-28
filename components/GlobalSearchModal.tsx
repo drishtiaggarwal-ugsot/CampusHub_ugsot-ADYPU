@@ -11,36 +11,29 @@ type Props = {
 };
 
 export default function GlobalSearchModal({ isOpen, onClose }: Props) {
+  if (!isOpen) return null;
+  return <GlobalSearchModalContent onClose={onClose} />;
+}
+
+function GlobalSearchModalContent({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GlobalSearchResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'events' | 'projects' | 'forum' | 'opportunities' | 'students'>('all');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
-  if (prevIsOpen !== isOpen) {
-    setPrevIsOpen(isOpen);
-    if (!isOpen) {
-      setQuery('');
-      setResults(null);
-    }
-  }
+  useEffect(() => {
+    const timer = setTimeout(() => inputRef.current?.focus(), 50);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      const timer = setTimeout(() => inputRef.current?.focus(), 50);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [isOpen, onClose]);
+  }, [onClose]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -78,8 +71,6 @@ export default function GlobalSearchModal({ isOpen, onClose }: Props) {
     };
   }, [query]);
 
-  if (!isOpen) return null;
-
   return (
     <div
       className="global-search-backdrop"
@@ -107,7 +98,11 @@ export default function GlobalSearchModal({ isOpen, onClose }: Props) {
               type="button"
               className="global-search__clear"
               aria-label="Clear search"
-              onClick={() => setQuery('')}
+              onClick={() => {
+                setQuery('');
+                setResults(null);
+                setLoading(false);
+              }}
             >
               ×
             </button>
@@ -268,7 +263,7 @@ export default function GlobalSearchModal({ isOpen, onClose }: Props) {
                     {results.students.map((st) => (
                       <Link
                         key={st.id}
-                        href="/students"
+                        href={`/students/${st.id}`}
                         onClick={onClose}
                         className="global-search__result"
                       >

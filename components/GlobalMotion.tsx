@@ -131,7 +131,6 @@ export default function GlobalMotion() {
           element.addEventListener('pointerleave', onGlassLeave);
         });
         magneticTargets.forEach((element) => {
-          element.classList.add('magnetic');
           element.addEventListener('pointermove', onMagneticMove);
           element.addEventListener('pointerleave', onMagneticLeave);
         });

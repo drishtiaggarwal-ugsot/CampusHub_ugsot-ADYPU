@@ -22,10 +22,7 @@ export async function POST(request: Request) {
     if (error instanceof AuthServiceError) {
       return NextResponse.json({ form: error.message }, { status: error.status });
     }
-    if (error instanceof Error && error.message.startsWith('Supabase is not configured.')) {
-      return NextResponse.json({ form: error.message }, { status: 503 });
-    }
-    console.error('Unable to send password reset with Supabase.', error);
+    console.error('Unable to send password reset with Firebase.', error);
     return NextResponse.json({ form: 'Password reset is temporarily unavailable. Please try again.' }, { status: 503 });
   }
 }

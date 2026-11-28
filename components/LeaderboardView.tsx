@@ -779,7 +779,7 @@ export default function LeaderboardView({
                           </div>
                           <div>
                             <Link
-                              href="/students"
+                              href={`/students/${entry.userId}`}
                               style={{
                                 fontWeight: 800,
                                 fontSize: 14,

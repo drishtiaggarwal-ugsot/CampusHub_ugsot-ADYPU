@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { CurrentUser } from '@/lib/auth';
 import { getPublishedNoticeboardEvents } from '@/lib/db/noticeboard-events';
 import { formatEventDateRange } from '@/lib/dates';
 import type { NoticeboardCampusEvent } from '@/lib/types';
@@ -65,7 +66,11 @@ const showcases = [
   },
 ];
 
-export default async function WelcomeExperience() {
+export default async function WelcomeExperience({
+  currentUser,
+}: {
+  currentUser?: CurrentUser | null;
+} = {}) {
   let landingEventTeasers: NoticeboardCampusEvent[] = [];
   let eventLoadError = false;
   try {
@@ -80,9 +85,9 @@ export default async function WelcomeExperience() {
       <div className={styles.welcomePage}>
         <Grain />
         <a className={styles.skipLink} href="#landing-main">Skip to main content</a>
-        <Nav />
+        <Nav currentUser={currentUser} />
         <main id="landing-main" tabIndex={-1}>
-        <section className={styles.hero} aria-labelledby="welcome-title" data-nav-theme="light">
+        <section id="hero" className={styles.hero} aria-labelledby="welcome-title" data-nav-theme="light">
           <div className={styles.heroCopy}>
             <p className={styles.eyebrow}><span /> UGSOT · ADYPU</p>
             <h1 id="welcome-title">Build your next idea <span>here.</span></h1>
@@ -90,7 +95,15 @@ export default async function WelcomeExperience() {
               Find opportunities, meet collaborators and grow your work with the UGSOT community.
             </p>
             <div className={styles.heroActions}>
-              <Link href="/auth/sign-in" className={styles.primaryButton}>Sign in <span aria-hidden="true">↗</span></Link>
+              {currentUser ? (
+                <Link href="/" className={styles.primaryButton}>
+                  Go to Dashboard <span aria-hidden="true">→</span>
+                </Link>
+              ) : (
+                <Link href="/auth/sign-in" className={styles.primaryButton}>
+                  Sign in <span aria-hidden="true">↗</span>
+                </Link>
+              )}
               <Link href="/opportunities" className={styles.secondaryButton}>Browse opportunities</Link>
             </div>
             <LiveClock />
@@ -251,7 +264,15 @@ export default async function WelcomeExperience() {
           <p className={styles.sectionEyebrow}>Your next idea can start here</p>
           <h2 id="closing-title">Make something that brings people together.</h2>
           <div className={styles.closingActions}>
-            <Link href="/auth/sign-in" className={styles.primaryButton}>Sign in <span aria-hidden="true">↗</span></Link>
+            {currentUser ? (
+              <Link href="/" className={styles.primaryButton}>
+                Go to Dashboard <span aria-hidden="true">→</span>
+              </Link>
+            ) : (
+              <Link href="/auth/sign-in" className={styles.primaryButton}>
+                Sign in <span aria-hidden="true">↗</span>
+              </Link>
+            )}
             <LiveClock />
           </div>
         </section>

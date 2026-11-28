@@ -15,13 +15,13 @@ type Props = {
   onSaveGitHub: (username: string) => Promise<void>;
 };
 
-const BADGE_CONFIG: Record<string, { icon: string; bg: string; desc: string }> = {
-  'First Event': { icon: '🌱', bg: '#E0F2FE', desc: 'Registered or attended your first campus event' },
-  'Hackathon Hero': { icon: '🚀', bg: '#FEE2E2', desc: 'Joined or created 3+ hackathon teams' },
-  'Problem Solver': { icon: '💡', bg: '#FEF08A', desc: '5+ accepted community answers helping peers' },
-  'Builder': { icon: '🛠️', bg: '#E9D5FF', desc: 'Published 3+ student projects to the showcase' },
-  'Mentor': { icon: '🎓', bg: '#DCFCE7', desc: 'Completed 5+ 1:1 mentorship or review sessions' },
-  'Top 10 This Month': { icon: '🏆', bg: '#FFE14D', desc: 'Ranked in the top 10 on the campus leaderboard' },
+const BADGE_CONFIG: Record<string, { icon: string; bg: string; text: string; desc: string }> = {
+  'First Event': { icon: '🌱', bg: 'rgba(56, 189, 248, 0.12)', text: '#0284c7', desc: 'Registered or attended your first campus event' },
+  'Hackathon Hero': { icon: '🚀', bg: 'rgba(239, 68, 68, 0.12)', text: '#dc2626', desc: 'Joined or created 3+ hackathon teams' },
+  'Problem Solver': { icon: '💡', bg: 'rgba(234, 179, 8, 0.12)', text: '#ca8a04', desc: '5+ accepted community answers helping peers' },
+  'Builder': { icon: '🛠️', bg: 'rgba(168, 85, 247, 0.12)', text: '#9333ea', desc: 'Published 3+ student projects to the showcase' },
+  'Mentor': { icon: '🎓', bg: 'rgba(34, 197, 94, 0.12)', text: '#16a34a', desc: 'Completed 5+ 1:1 mentorship or review sessions' },
+  'Top 10 This Month': { icon: '🏆', bg: 'rgba(245, 158, 11, 0.15)', text: '#d97706', desc: 'Ranked in the top 10 on the campus leaderboard' },
 };
 
 export default function DashboardTab({
@@ -58,7 +58,7 @@ export default function DashboardTab({
   const maxActivity = Math.max(1, ...stats.monthlyActivity.map((m) => m.count));
 
   return (
-    <div className="dashboard-container" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div className="dashboard-container" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Top Action Bar for Brag Sheet */}
       <div
         className="no-print"
@@ -68,37 +68,38 @@ export default function DashboardTab({
           justifyContent: 'space-between',
           alignItems: 'center',
           gap: 12,
-          padding: 16,
-          backgroundColor: '#fff',
-          border: '2px solid #1a1a1a',
-          borderRadius: 4,
-          boxShadow: '3px 3px 0 #1a1a1a',
+          padding: '16px 20px',
+          backgroundColor: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 14,
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
         }}
       >
         <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Developer Activity & Insights</h2>
-          <p style={{ margin: '2px 0 0 0', fontSize: 13, color: '#555' }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--ink)' }}>Developer Activity & Insights</h2>
+          <p style={{ margin: '3px 0 0 0', fontSize: 13, color: 'var(--muted)', opacity: 0.9 }}>
             Live metrics from your campus events, projects, community contributions, and GitHub.
           </p>
         </div>
         <button
           onClick={handlePrintBragSheet}
+          type="button"
           style={{
-            padding: '10px 18px',
-            backgroundColor: '#FFE066',
-            color: '#1a1a1a',
-            border: '2px solid #1a1a1a',
-            borderRadius: 4,
-            fontWeight: 800,
-            fontSize: 14,
+            padding: '9px 18px',
+            backgroundColor: 'var(--ink)',
+            color: 'var(--canvas)',
+            border: 'none',
+            borderRadius: 8,
+            fontWeight: 600,
+            fontSize: 13,
             cursor: 'pointer',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 6,
-            boxShadow: '2px 2px 0 #1a1a1a',
+            gap: 8,
+            transition: 'opacity 150ms ease',
           }}
         >
-          📄 Export Resume / Brag Sheet (Print PDF)
+          <span>📄</span> Export Resume / Brag Sheet (PDF)
         </button>
       </div>
 
@@ -107,28 +108,28 @@ export default function DashboardTab({
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: 14,
+          gap: 12,
         }}
       >
         {/* Leaderboard Rank & Points */}
         <div
           style={{
-            border: '2px solid #1a1a1a',
-            borderRadius: 4,
-            padding: 16,
-            backgroundColor: '#FFE14D',
-            color: '#1a1a1a',
-            boxShadow: '3px 3px 0 #1a1a1a',
-            position: 'relative',
+            border: '1px solid rgba(245, 158, 11, 0.25)',
+            borderRadius: 12,
+            padding: '16px 18px',
+            backgroundColor: 'rgba(245, 158, 11, 0.06)',
+            color: 'var(--ink)',
           }}
         >
-          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>🏆 Leaderboard</div>
-          <div style={{ fontSize: 32, fontWeight: 900, margin: '6px 0 2px 0' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Leaderboard
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800, margin: '6px 0 2px 0' }}>
             {stats.leaderboardRank ? `#${stats.leaderboardRank}` : 'Unranked'}
           </div>
-          <div style={{ fontSize: 12, fontWeight: 600 }}>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
             {stats.leaderboardPoints ?? 0} pts earned ·{' '}
-            <a href="/leaderboard" style={{ textDecoration: 'underline', color: 'inherit' }}>
+            <a href="/leaderboard" style={{ color: 'var(--electric-blue)', textDecoration: 'none', fontWeight: 600 }}>
               View Board →
             </a>
           </div>
@@ -137,147 +138,167 @@ export default function DashboardTab({
         {/* Streak Counter */}
         <div
           style={{
-            border: '2px solid #1a1a1a',
-            borderRadius: 4,
-            padding: 16,
-            backgroundColor: '#FF6B6B',
-            color: '#fff',
-            boxShadow: '3px 3px 0 #1a1a1a',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            borderRadius: 12,
+            padding: '16px 18px',
+            backgroundColor: 'rgba(239, 68, 68, 0.06)',
+            color: 'var(--ink)',
           }}
         >
-          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>🔥 Dev Streak</div>
-          <div style={{ fontSize: 32, fontWeight: 900, margin: '6px 0 2px 0' }}>{stats.streakDays} Days</div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>Consecutive activity streak</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Dev Streak
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800, margin: '6px 0 2px 0' }}>{stats.streakDays} Days</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Consecutive activity streak</div>
         </div>
 
         {/* Projects Posted */}
         <div
           style={{
-            border: '2px solid #1a1a1a',
-            borderRadius: 4,
-            padding: 16,
-            backgroundColor: '#4EA8DE',
-            color: '#fff',
-            boxShadow: '3px 3px 0 #1a1a1a',
+            border: '1px solid rgba(59, 130, 246, 0.2)',
+            borderRadius: 12,
+            padding: '16px 18px',
+            backgroundColor: 'rgba(59, 130, 246, 0.06)',
+            color: 'var(--ink)',
           }}
         >
-          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>💻 Projects Posted</div>
-          <div style={{ fontSize: 32, fontWeight: 900, margin: '6px 0 2px 0' }}>{stats.projectsCount}</div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>Shared in Project Showcase</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Projects Posted
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800, margin: '6px 0 2px 0' }}>{stats.projectsCount}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Shared in Showcase</div>
         </div>
 
         {/* Events Attended vs Registered */}
         <div
           style={{
-            border: '2px solid #1a1a1a',
-            borderRadius: 4,
-            padding: 16,
-            backgroundColor: '#70C1B3',
-            color: '#1a1a1a',
-            boxShadow: '3px 3px 0 #1a1a1a',
+            border: '1px solid rgba(16, 185, 129, 0.2)',
+            borderRadius: 12,
+            padding: '16px 18px',
+            backgroundColor: 'rgba(16, 185, 129, 0.06)',
+            color: 'var(--ink)',
           }}
         >
-          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>🎟️ Events Attended</div>
-          <div style={{ fontSize: 32, fontWeight: 900, margin: '6px 0 2px 0' }}>
-            {stats.eventsAttendedCount}
-            <span style={{ fontSize: 18, fontWeight: 600, opacity: 0.8 }}> / {stats.eventsRegisteredCount}</span>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Events Attended
           </div>
-          <div style={{ fontSize: 12 }}>Attended vs Registered</div>
+          <div style={{ fontSize: 28, fontWeight: 800, margin: '6px 0 2px 0' }}>
+            {stats.eventsAttendedCount}
+            <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--muted)' }}> / {stats.eventsRegisteredCount}</span>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Attended vs Registered</div>
         </div>
 
         {/* Certificates Earned */}
         <div
           style={{
-            border: '2px solid #1a1a1a',
-            borderRadius: 4,
-            padding: 16,
-            backgroundColor: '#FFE066',
-            color: '#1a1a1a',
-            boxShadow: '3px 3px 0 #1a1a1a',
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            padding: '16px 18px',
+            backgroundColor: 'var(--card)',
+            color: 'var(--ink)',
           }}
         >
-          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>🎓 Certificates</div>
-          <div style={{ fontSize: 32, fontWeight: 900, margin: '6px 0 2px 0' }}>{stats.certificatesCount}</div>
-          <div style={{ fontSize: 12 }}>Verified event completions</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Certificates
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800, margin: '6px 0 2px 0' }}>{stats.certificatesCount}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Verified event completions</div>
         </div>
 
         {/* Forum Answers Accepted */}
         <div
           style={{
-            border: '2px solid #1a1a1a',
-            borderRadius: 4,
-            padding: 16,
-            backgroundColor: '#9B5DE5',
-            color: '#fff',
-            boxShadow: '3px 3px 0 #1a1a1a',
+            border: '1px solid rgba(168, 85, 247, 0.2)',
+            borderRadius: 12,
+            padding: '16px 18px',
+            backgroundColor: 'rgba(168, 85, 247, 0.06)',
+            color: 'var(--ink)',
           }}
         >
-          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>💡 Accepted Answers</div>
-          <div style={{ fontSize: 32, fontWeight: 900, margin: '6px 0 2px 0' }}>{stats.acceptedAnswersCount}</div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>Helpful solutions verified</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#7e22ce', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Accepted Answers
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800, margin: '6px 0 2px 0' }}>{stats.acceptedAnswersCount}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Community solutions</div>
         </div>
 
         {/* Mentorship Completed */}
         <div
           style={{
-            border: '2px solid #1a1a1a',
-            borderRadius: 4,
-            padding: 16,
-            backgroundColor: '#F3C68F',
-            color: '#1a1a1a',
-            boxShadow: '3px 3px 0 #1a1a1a',
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            padding: '16px 18px',
+            backgroundColor: 'var(--card)',
+            color: 'var(--ink)',
           }}
         >
-          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>🤝 Mentorships</div>
-          <div style={{ fontSize: 32, fontWeight: 900, margin: '6px 0 2px 0' }}>{stats.completedMentorshipCount}</div>
-          <div style={{ fontSize: 12 }}>1:1 sessions completed</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Mentorships
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800, margin: '6px 0 2px 0' }}>{stats.completedMentorshipCount}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>1:1 sessions completed</div>
         </div>
       </div>
 
       {/* Badges Earned Section */}
       <div
         style={{
-          border: '2px solid #1a1a1a',
-          borderRadius: 4,
+          border: '1px solid var(--border)',
+          borderRadius: 14,
           padding: 20,
-          backgroundColor: '#fff',
-          boxShadow: '3px 3px 0 #1a1a1a',
+          backgroundColor: 'var(--card)',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>🎖️ Activity Badges Earned</h3>
-            <p style={{ margin: '2px 0 0 0', fontSize: 13, color: '#555' }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>Activity Badges Earned</h3>
+            <p style={{ margin: '3px 0 0 0', fontSize: 13, color: 'var(--muted)' }}>
               Badges unlocked automatically from your verified campus activity.
             </p>
           </div>
-          <span style={{ fontSize: 13, fontWeight: 700, backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: 4, border: '1px solid #1a1a1a' }}>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              backgroundColor: 'var(--panel)',
+              padding: '4px 10px',
+              borderRadius: 20,
+              border: '1px solid var(--border)',
+              color: 'var(--ink)',
+            }}
+          >
             {stats.badges?.length || 0} Unlocked
           </span>
         </div>
 
         {stats.badges && stats.badges.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
             {stats.badges.map((badgeName) => {
-              const info = BADGE_CONFIG[badgeName] || { icon: '⭐', bg: '#fef08a', desc: 'Active contributor' };
+              const info = BADGE_CONFIG[badgeName] || {
+                icon: '⭐',
+                bg: 'var(--panel)',
+                text: 'var(--ink)',
+                desc: 'Active contributor',
+              };
               return (
                 <div
                   key={badgeName}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 10,
-                    padding: '10px 14px',
-                    borderRadius: 4,
-                    border: '2px solid #1a1a1a',
+                    gap: 12,
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    border: '1px solid var(--border)',
                     backgroundColor: info.bg,
-                    boxShadow: '2px 2px 0 #1a1a1a',
                   }}
                 >
-                  <span style={{ fontSize: 22 }}>{info.icon}</span>
+                  <span style={{ fontSize: 24 }}>{info.icon}</span>
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: 14 }}>{badgeName}</div>
-                    <div style={{ fontSize: 11, color: '#333', lineHeight: 1.3 }}>{info.desc}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: info.text }}>{badgeName}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.3, marginTop: 2 }}>{info.desc}</div>
                   </div>
                 </div>
               );
@@ -286,12 +307,12 @@ export default function DashboardTab({
         ) : (
           <div
             style={{
-              padding: 16,
-              backgroundColor: '#fafafa',
-              border: '1px dashed #bbb',
-              borderRadius: 4,
+              padding: 20,
+              backgroundColor: 'var(--panel)',
+              border: '1px dashed var(--border)',
+              borderRadius: 10,
               fontSize: 13,
-              color: '#666',
+              color: 'var(--muted)',
               textAlign: 'center',
             }}
           >
@@ -303,16 +324,16 @@ export default function DashboardTab({
       {/* Monthly Activity SVG Chart */}
       <div
         style={{
-          border: '2px solid #1a1a1a',
-          borderRadius: 4,
+          border: '1px solid var(--border)',
+          borderRadius: 14,
           padding: 20,
-          backgroundColor: '#fff',
-          boxShadow: '3px 3px 0 #1a1a1a',
+          backgroundColor: 'var(--card)',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>📊 Monthly Activity Breakdown (Last 6 Months)</h3>
-          <span style={{ fontSize: 12, color: '#666', fontWeight: 600 }}>Pure SVG / CSS Native Chart</span>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>Monthly Activity Breakdown (Last 6 Months)</h3>
+          <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>Verified platform actions</span>
         </div>
 
         <div style={{ width: '100%', overflowX: 'auto' }}>
@@ -322,20 +343,17 @@ export default function DashboardTab({
             aria-label="Monthly activity bar chart"
           >
             {/* Grid lines */}
-            <line x1="40" y1="30" x2="580" y2="30" stroke="#e0e0e0" strokeDasharray="4" />
-            <line x1="40" y1="85" x2="580" y2="85" stroke="#e0e0e0" strokeDasharray="4" />
-            <line x1="40" y1="140" x2="580" y2="140" stroke="#e0e0e0" strokeDasharray="4" />
-            <line x1="40" y1="165" x2="580" y2="165" stroke="#1a1a1a" strokeWidth="2" />
+            <line x1="40" y1="30" x2="580" y2="30" stroke="var(--border)" strokeDasharray="4" strokeOpacity="0.6" />
+            <line x1="40" y1="85" x2="580" y2="85" stroke="var(--border)" strokeDasharray="4" strokeOpacity="0.6" />
+            <line x1="40" y1="140" x2="580" y2="140" stroke="var(--border)" strokeDasharray="4" strokeOpacity="0.6" />
+            <line x1="40" y1="165" x2="580" y2="165" stroke="var(--border)" strokeWidth="1" />
 
             {/* Bars */}
             {stats.monthlyActivity.map((item, index) => {
-              const barWidth = 44;
+              const barWidth = 40;
               const xPos = 70 + index * 85;
               const barHeight = Math.max(8, (item.count / maxActivity) * 125);
               const yPos = 165 - barHeight;
-
-              const colors = ['#4EA8DE', '#70C1B3', '#FFE066', '#FF6B6B', '#9B5DE5', '#06D6A0'];
-              const fillColor = colors[index % colors.length];
 
               return (
                 <g key={item.month}>
@@ -345,10 +363,9 @@ export default function DashboardTab({
                     y={yPos}
                     width={barWidth}
                     height={barHeight}
-                    fill={fillColor}
-                    stroke="#1a1a1a"
-                    strokeWidth="2"
-                    rx="2"
+                    fill="var(--electric-blue)"
+                    opacity="0.85"
+                    rx="6"
                   />
                   {/* Count Label */}
                   <text
@@ -356,8 +373,8 @@ export default function DashboardTab({
                     y={yPos - 6}
                     textAnchor="middle"
                     fontSize="12"
-                    fontWeight="800"
-                    fill="#1a1a1a"
+                    fontWeight="700"
+                    fill="var(--ink)"
                   >
                     {item.count}
                   </text>
@@ -366,9 +383,9 @@ export default function DashboardTab({
                     x={xPos + barWidth / 2}
                     y="185"
                     textAnchor="middle"
-                    fontSize="13"
-                    fontWeight="700"
-                    fill="#1a1a1a"
+                    fontSize="12"
+                    fontWeight="600"
+                    fill="var(--muted)"
                   >
                     {item.month}
                   </text>
@@ -382,21 +399,21 @@ export default function DashboardTab({
       {/* GitHub Integration Section */}
       <div
         style={{
-          border: '2px solid #1a1a1a',
-          borderRadius: 4,
+          border: '1px solid var(--border)',
+          borderRadius: 14,
           padding: 20,
-          backgroundColor: '#fff',
-          boxShadow: '3px 3px 0 #1a1a1a',
+          backgroundColor: 'var(--card)',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>🐙 GitHub Activity & Insights</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>GitHub Activity & Insights</h3>
           {stats.githubData?.username && (
             <a
               href={`https://github.com/${stats.githubData.username}`}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ fontSize: 13, fontWeight: 700, textDecoration: 'underline' }}
+              style={{ fontSize: 13, fontWeight: 600, color: 'var(--electric-blue)', textDecoration: 'none' }}
             >
               @{stats.githubData.username} on GitHub ↗
             </a>
@@ -406,111 +423,110 @@ export default function DashboardTab({
         {stats.githubData ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {stats.githubData.error ? (
-              <p style={{ margin: 0, color: '#d32f2f', fontSize: 13 }}>{stats.githubData.error}</p>
+              <p style={{ margin: 0, color: '#dc2626', fontSize: 13 }}>{stats.githubData.error}</p>
             ) : (
               <div
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-                  gap: 12,
+                  gap: 10,
                 }}
               >
-                <div style={{ border: '1.5px solid #1a1a1a', borderRadius: 4, padding: 12, background: '#f9f9f9' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#666' }}>PUBLIC REPOS</div>
-                  <div style={{ fontSize: 24, fontWeight: 800 }}>{stats.githubData.publicRepos}</div>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: 'var(--panel)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.04em' }}>PUBLIC REPOS</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{stats.githubData.publicRepos}</div>
                 </div>
-                <div style={{ border: '1.5px solid #1a1a1a', borderRadius: 4, padding: 12, background: '#f9f9f9' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#666' }}>FOLLOWERS</div>
-                  <div style={{ fontSize: 24, fontWeight: 800 }}>{stats.githubData.followers}</div>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: 'var(--panel)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.04em' }}>FOLLOWERS</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{stats.githubData.followers}</div>
                 </div>
-                <div style={{ border: '1.5px solid #1a1a1a', borderRadius: 4, padding: 12, background: '#f9f9f9' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#666' }}>RECENT COMMITS</div>
-                  <div style={{ fontSize: 24, fontWeight: 800 }}>{stats.githubData.recentCommits}</div>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: 'var(--panel)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.04em' }}>RECENT COMMITS</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{stats.githubData.recentCommits}</div>
                 </div>
-                <div style={{ border: '1.5px solid #1a1a1a', borderRadius: 4, padding: 12, background: '#f9f9f9' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#666' }}>PUBLIC EVENTS</div>
-                  <div style={{ fontSize: 24, fontWeight: 800 }}>{stats.githubData.recentEventsCount}</div>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: 'var(--panel)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.04em' }}>PUBLIC EVENTS</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{stats.githubData.recentEventsCount}</div>
                 </div>
               </div>
             )}
           </div>
         ) : (
-          <p style={{ margin: 0, fontSize: 14, color: '#555' }}>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>
             No GitHub username linked yet. Connect your GitHub profile below to automatically pull repository stats and public contribution insights!
           </p>
         )}
 
         {/* Update GitHub input */}
-        <form onSubmit={handleUpdateGitHub} style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
+        <form onSubmit={handleUpdateGitHub} style={{ marginTop: 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input
             type="text"
-            placeholder="Your GitHub username (e.g. torvalds)"
+            placeholder="Your GitHub username (e.g. aditya-dev)"
             value={ghInput}
             onChange={(e) => setGhInput(e.target.value)}
             style={{
-              padding: '8px 12px',
-              border: '2px solid #1a1a1a',
-              borderRadius: 4,
+              padding: '9px 14px',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
               fontSize: 13,
               width: 260,
+              background: 'var(--panel)',
+              color: 'var(--ink)',
             }}
           />
           <button
             type="submit"
             disabled={savingGh}
             style={{
-              padding: '8px 16px',
-              backgroundColor: '#1a1a1a',
-              color: '#fff',
-              border: '2px solid #1a1a1a',
-              borderRadius: 4,
-              fontWeight: 700,
+              padding: '9px 18px',
+              backgroundColor: 'var(--ink)',
+              color: 'var(--canvas)',
+              border: 'none',
+              borderRadius: 8,
+              fontWeight: 600,
               fontSize: 13,
               cursor: 'pointer',
+              opacity: savingGh ? 0.7 : 1,
             }}
           >
             {savingGh ? 'Saving...' : 'Link GitHub'}
           </button>
-          {ghMsg && <span style={{ fontSize: 12, fontWeight: 600, color: '#2e7d32' }}>{ghMsg}</span>}
+          {ghMsg && <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a' }}>{ghMsg}</span>}
         </form>
       </div>
 
       {/* Skills Radar / Tags Cloud */}
       <div
         style={{
-          border: '2px solid #1a1a1a',
-          borderRadius: 4,
+          border: '1px solid var(--border)',
+          borderRadius: 14,
           padding: 20,
-          backgroundColor: '#fff',
-          boxShadow: '3px 3px 0 #1a1a1a',
+          backgroundColor: 'var(--card)',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
         }}
       >
-        <h3 style={{ margin: '0 0 12px 0', fontSize: 16, fontWeight: 800 }}>🏷️ Skills Cloud & Technical Strengths</h3>
+        <h3 style={{ margin: '0 0 12px 0', fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>Skills Cloud & Technical Strengths</h3>
         {student.skills.length > 0 ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {student.skills.map((skill, index) => {
-              const bgColors = ['#FFE066', '#4EA8DE', '#70C1B3', '#FF6B6B', '#9B5DE5', '#B8E994'];
-              const bg = bgColors[index % bgColors.length];
-              return (
-                <span
-                  key={skill}
-                  style={{
-                    padding: '6px 14px',
-                    backgroundColor: bg,
-                    border: '2px solid #1a1a1a',
-                    borderRadius: 4,
-                    fontWeight: 700,
-                    fontSize: 13,
-                    boxShadow: '1.5px 1.5px 0 #1a1a1a',
-                  }}
-                >
-                  {skill}
-                </span>
-              );
-            })}
+            {student.skills.map((skill) => (
+              <span
+                key={skill}
+                style={{
+                  padding: '6px 14px',
+                  backgroundColor: 'var(--panel)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  fontWeight: 600,
+                  fontSize: 13,
+                  color: 'var(--ink)',
+                }}
+              >
+                {skill}
+              </span>
+            ))}
           </div>
         ) : (
-          <p style={{ margin: 0, color: '#666', fontSize: 13 }}>
+          <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
             No skills added yet. Use the Edit Profile form on the Overview tab to add your languages and frameworks!
           </p>
         )}

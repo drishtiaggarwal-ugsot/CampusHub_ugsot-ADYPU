@@ -4,7 +4,7 @@ import { updateUserProfile } from '@/lib/db/dashboard';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { fullName, githubUsername, skills, bio } = body;
+    const { fullName, githubUsername, skills, bio, courseYear } = body;
 
     // Reject if any attempt to alter role
     if ('role' in body) {
@@ -19,6 +19,7 @@ export async function POST(request: Request) {
       githubUsername,
       skills,
       bio,
+      courseYear,
     });
 
     return NextResponse.json({ success: true });

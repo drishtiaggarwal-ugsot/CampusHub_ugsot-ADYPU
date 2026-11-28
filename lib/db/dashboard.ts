@@ -1,9 +1,8 @@
 import 'server-only';
-import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase/server';
+import { createDbClient, isFirestoreConfigured } from '@/lib/db/client';
 import { getCurrentUser } from '@/lib/auth';
 import { getUserLeaderboardPosition } from '@/lib/db/leaderboard';
 import type { Student } from '@/lib/types';
-import { students, getStudent } from '@/lib/data';
 
 export type ActivityMonth = {
   month: string; // e.g. 'Nov 2026'
@@ -155,7 +154,7 @@ export async function getUserDashboardData(
     { month: 'Nov', count: 18 },
   ];
 
-  if (!isSupabaseConfigured()) {
+  if (!(await isFirestoreConfigured())) {
     const githubData = githubUsername ? await fetchGitHubUserInsights(githubUsername) : null;
     return {
       projectsCount: 2,
@@ -171,7 +170,7 @@ export async function getUserDashboardData(
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
 
     // 1. Projects count
     const { count: projectsCount } = await supabase
@@ -319,8 +318,9 @@ export async function updateUserProfile(data: {
   githubUsername?: string;
   skills?: string[];
   bio?: string;
+  courseYear?: string;
 }): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createDbClient();
   const currentUser = await getCurrentUser();
   if (!currentUser) throw new Error('You must be signed in to update your profile.');
 
@@ -329,6 +329,7 @@ export async function updateUserProfile(data: {
     github_username?: string | null;
     skills?: string[];
     bio?: string | null;
+    course_year?: string | null;
     updated_at: string;
   } = {
     updated_at: new Date().toISOString(),
@@ -348,6 +349,10 @@ export async function updateUserProfile(data: {
 
   if (typeof data.bio === 'string') {
     updatePayload.bio = data.bio.trim() || null;
+  }
+
+  if (typeof data.courseYear === 'string') {
+    updatePayload.course_year = data.courseYear.trim() || null;
   }
 
   // Also sync to auth user metadata so it persists even if DB schema cache is refreshing
@@ -424,24 +429,16 @@ export function calculateProfileCompleteness(profile: {
  * Fetch all visible students from Supabase (respecting privacy flags).
  */
 export async function getPublicStudents(): Promise<Student[]> {
-  if (!isSupabaseConfigured()) {
-    return students;
-  }
-
   try {
-    const supabase = await createSupabaseServerClient();
-    const { data, error } = await supabase
+    const supabase = await createDbClient();
+    const { data } = await supabase
       .from('profiles')
-      .select('id, full_name, email, course_year, bio, skills, github_username, is_profile_private')
+      .select('id, full_name, email, course_year, bio, skills, github_username, is_profile_private, looking_for_team')
       .neq('is_profile_private', true);
 
-    if (error || !data || data.length === 0) {
-      return students;
-    }
-
-    return data.map((p) => {
+    const dbStudents: Student[] = (data ?? []).map((p) => {
       const handle = p.email ? p.email.split('@')[0] : p.id.slice(0, 8);
-      const studentSkills = Array.isArray(p.skills) && p.skills.length > 0 ? p.skills : ['React', 'TypeScript', 'Git'];
+      const studentSkills = Array.isArray(p.skills) ? p.skills : [];
       const studentLinks = {
         linkedin: '',
         github: p.github_username ? `github.com/${p.github_username}` : '',
@@ -450,13 +447,14 @@ export async function getPublicStudents(): Promise<Student[]> {
       };
       return {
         id: p.id,
-        name: p.full_name || 'Campus Student',
+        name: p.full_name || handle,
         handle,
+        email: p.email || undefined,
         branch: p.course_year ? p.course_year.split(' ')[0] : 'CSE',
-        year: p.course_year || '3rd year',
-        bio: p.bio || 'Student at UGSOT ADYPU learning, building, and contributing in the open.',
+        year: p.course_year || '',
+        bio: p.bio || '',
         skills: studentSkills,
-        lookingForTeam: true,
+        lookingForTeam: p.looking_for_team !== false,
         links: studentLinks,
         achievements: [],
         going: [],
@@ -470,8 +468,10 @@ export async function getPublicStudents(): Promise<Student[]> {
         }),
       };
     });
+
+    return dbStudents;
   } catch {
-    return students;
+    return [];
   }
 }
 
@@ -479,22 +479,18 @@ export async function getPublicStudents(): Promise<Student[]> {
  * Fetch a single public student profile by ID or handle.
  */
 export async function getPublicStudentById(id: string): Promise<Student | null> {
-  if (!isSupabaseConfigured()) {
-    return getStudent(id) || null;
-  }
-
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { data: p } = await supabase
       .from('profiles')
-      .select('id, full_name, email, course_year, bio, skills, github_username, is_profile_private')
+      .select('id, full_name, email, course_year, bio, skills, github_username, is_profile_private, looking_for_team, role')
       .eq('id', id)
       .maybeSingle();
 
     if (p) {
       if (p.is_profile_private) return null;
       const handle = p.email ? p.email.split('@')[0] : p.id.slice(0, 8);
-      const studentSkills = Array.isArray(p.skills) && p.skills.length > 0 ? p.skills : ['React', 'TypeScript', 'Git'];
+      const studentSkills = Array.isArray(p.skills) ? p.skills : [];
       const studentLinks = {
         linkedin: '',
         github: p.github_username ? `github.com/${p.github_username}` : '',
@@ -503,16 +499,18 @@ export async function getPublicStudentById(id: string): Promise<Student | null> 
       };
       return {
         id: p.id,
-        name: p.full_name || 'Campus Student',
+        name: p.full_name || handle,
         handle,
+        email: p.email || undefined,
         branch: p.course_year ? p.course_year.split(' ')[0] : 'CSE',
-        year: p.course_year || '3rd year',
-        bio: p.bio || 'Student at UGSOT ADYPU learning, building, and contributing in the open.',
+        year: p.course_year || '',
+        bio: p.bio || '',
         skills: studentSkills,
-        lookingForTeam: true,
+        lookingForTeam: p.looking_for_team !== false,
         links: studentLinks,
         achievements: [],
         going: [],
+        role: (p.role as 'organizer' | 'student') || 'student',
         profileCompleteness: calculateProfileCompleteness({
           name: p.full_name,
           courseYear: p.course_year,
@@ -524,8 +522,8 @@ export async function getPublicStudentById(id: string): Promise<Student | null> 
       };
     }
 
-    return getStudent(id) || null;
+    return null;
   } catch {
-    return getStudent(id) || null;
+    return null;
   }
 }

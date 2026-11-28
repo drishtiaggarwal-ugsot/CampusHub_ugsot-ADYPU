@@ -1,8 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
-import { getEvent } from '@/lib/data';
-import { getEventAttendanceDetails } from '@/lib/db/events';
+import { findEventMeta, getEventAttendanceDetails } from '@/lib/db/events';
 import AttendanceTracker from '@/components/AttendanceTracker';
 import PageHero from '@/components/PageHero';
 
@@ -12,7 +11,7 @@ type Props = { params: Promise<{ eventId: string }> };
 
 export async function generateMetadata({ params }: Props) {
   const { eventId } = await params;
-  const event = getEvent(eventId);
+  const event = await findEventMeta(eventId);
   return {
     title: event ? `Attendance · ${event.title} · CampusHub` : 'Attendance · CampusHub',
   };
@@ -20,7 +19,7 @@ export async function generateMetadata({ params }: Props) {
 
 export default async function EventAttendancePage({ params }: Props) {
   const { eventId } = await params;
-  const event = getEvent(eventId);
+  const event = await findEventMeta(eventId);
   if (!event) notFound();
 
   const currentUser = await getCurrentUser();

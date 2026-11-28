@@ -2,8 +2,15 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
-import { isStringRecord, validateSignIn, validateSignUp, type AuthErrors } from '@/lib/validation';
+import { useEffect, useState, type FormEvent } from 'react';
+import {
+  completeGoogleRedirectClient,
+  signInWithEmailClient,
+  signInWithGoogleClient,
+  signUpWithEmailClient,
+} from '@/lib/auth-client';
+import { AuthServiceError } from '@/lib/auth-types';
+import { validateSignIn, validateSignUp, type AuthErrors } from '@/lib/validation';
 
 type Mode = 'sign-in' | 'register';
 type Fields = {
@@ -28,6 +35,29 @@ const COURSE_YEARS = [
   'IT · 1st year', 'IT · 2nd year', 'IT · 3rd year', 'IT · 4th year',
 ];
 
+function GoogleMark() {
+  return (
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24">
+      <path
+        fill="#4285F4"
+        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
+      />
+    </svg>
+  );
+}
+
 function PasswordField({ id, label, value, autoComplete, error, onChange }: PasswordFieldProps) {
   const [visible, setVisible] = useState(false);
   const errorId = `${id}-error`;
@@ -50,8 +80,15 @@ function PasswordField({ id, label, value, autoComplete, error, onChange }: Pass
   );
 }
 
-export default function AuthForm({ mode }: { mode: Mode }) {
+export default function AuthForm({
+  mode,
+  redirectTo = '/',
+}: {
+  mode: Mode;
+  redirectTo?: string;
+}) {
   const router = useRouter();
+  const safeTarget = redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : '/';
   const [activeMode, setActiveMode] = useState(mode);
   const registering = activeMode === 'register';
   const [values, setValues] = useState<Fields>({
@@ -61,6 +98,22 @@ export default function AuthForm({ mode }: { mode: Mode }) {
   const [formError, setFormError] = useState('');
   const [formMessage, setFormMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [googlePending, setGooglePending] = useState(false);
+
+  const busy = submitting || googlePending;
+
+  useEffect(() => {
+    let active = true;
+    completeGoogleRedirectClient().then((signedIn) => {
+      if (active && signedIn) {
+        router.replace(safeTarget);
+        router.refresh();
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [router, safeTarget]);
 
   function update(field: keyof Fields, value: string) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -85,33 +138,47 @@ export default function AuthForm({ mode }: { mode: Mode }) {
 
     setSubmitting(true);
     try {
-      const response = await fetch(`/api/auth/${registering ? 'register' : 'sign-in'}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
-      });
-      const payload: unknown = await response.json();
-      if (!response.ok) {
-        if (typeof payload === 'object' && payload !== null) {
-          const result = payload as { errors?: unknown; form?: unknown };
-          if (isStringRecord(result.errors)) setErrors(result.errors);
-          if (typeof result.form === 'string') setFormError(result.form);
-        } else {
-          setFormError('We couldn’t complete that request. Please try again.');
-        }
-        return;
+      if (registering) {
+        await signUpWithEmailClient({
+          name: values.name,
+          email: values.email,
+          password: values.password,
+          courseYear: values.courseYear,
+        });
+      } else {
+        await signInWithEmailClient(values.email, values.password);
       }
-      if (registering && typeof payload === 'object' && payload !== null
-        && 'confirmationRequired' in payload && payload.confirmationRequired === true) {
-        setFormMessage('Check your email to confirm your account, then sign in.');
-        return;
-      }
-      router.replace('/');
+      router.replace(safeTarget);
       router.refresh();
-    } catch {
-      setFormError('We couldn’t reach CampusHub. Check your connection and try again.');
+    } catch (error) {
+      if (error instanceof AuthServiceError) {
+        setFormError(error.message);
+      } else {
+        setFormError('We couldn’t reach CampusHub. Check your connection and try again.');
+      }
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setErrors({});
+    setFormError('');
+    setFormMessage('');
+    setGooglePending(true);
+    try {
+      const result = await signInWithGoogleClient();
+      if (result.cancelled) return;
+      router.replace(safeTarget);
+      router.refresh();
+    } catch (error) {
+      if (error instanceof AuthServiceError) {
+        setFormError(error.message);
+      } else {
+        setFormError('Google sign-in could not be completed. Please try again.');
+      }
+    } finally {
+      setGooglePending(false);
     }
   }
 
@@ -119,7 +186,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
     <div className="auth-panel">
       <div className="auth-heading">
         <h1 className="auth-heading__title">{registering ? 'Join CampusHub' : 'Welcome back'}</h1>
-        <p>{registering ? 'Create your student account to get started.' : 'Sign in with your email address to continue.'}</p>
+        <p>{registering ? 'Create your student account to get started.' : 'Sign in with your email address or Google to continue.'}</p>
       </div>
       <div className="auth-tabs" role="tablist" aria-label="Account access">
         <button id="auth-tab-login" className={registering ? 'auth-tab' : 'auth-tab auth-tab--active'}
@@ -168,44 +235,30 @@ export default function AuthForm({ mode }: { mode: Mode }) {
       )}
       {formError && <p className="form-error" role="alert">{formError}</p>}
       {formMessage && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <p className="form-success" role="status">{formMessage}</p>
-          <button
-            type="button"
-            className="btn btn--outline"
-            style={{ fontSize: 13, padding: '6px 12px', alignSelf: 'flex-start' }}
-            disabled={submitting}
-            onClick={async () => {
-              if (!values.email) return;
-              try {
-                setFormMessage('Sending new confirmation email...');
-                const res = await fetch('/api/auth/resend-confirmation', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ email: values.email }),
-                });
-                if (res.ok) {
-                  setFormMessage('A new confirmation email has been sent. Check your inbox & spam folder.');
-                } else {
-                  setFormError('Unable to resend confirmation email. Please wait a moment before trying again.');
-                }
-              } catch {
-                setFormError('Network error trying to resend confirmation.');
-              }
-            }}
-          >
-            Resend confirmation email
-          </button>
-        </div>
+        <p className="form-success" role="status">{formMessage}</p>
       )}
       {!registering && (
         <Link href="/auth/forgot-password" className="auth-form__forgot">Forgot password?</Link>
       )}
-      <button className="btn btn--primary auth-form__submit" type="submit" disabled={submitting}>
+      <button className="btn btn--primary auth-form__submit" type="submit" disabled={busy}>
         {submitting ? (registering ? 'Creating account…' : 'Signing in…') : (registering ? 'Create account' : 'Sign in')}
       </button>
-        </form>
+      </form>
+
+      <div className="auth-divider" aria-hidden="true">
+        <span>or</span>
       </div>
+
+      <button
+        type="button"
+        className="btn auth-google"
+        onClick={handleGoogleSignIn}
+        disabled={busy}
+      >
+        <GoogleMark />
+        <span>{googlePending ? 'Connecting to Google…' : 'Continue with Google'}</span>
+      </button>
+    </div>
   );
 }
 

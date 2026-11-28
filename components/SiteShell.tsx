@@ -7,6 +7,7 @@ import NavBar from '@/components/NavBar';
 import SiteFooter from '@/components/SiteFooter';
 import SiteRail from '@/components/SiteRail';
 import GlobalMotion from '@/components/GlobalMotion';
+import AuthSessionSync from '@/components/auth/AuthSessionSync';
 import SvgDefs from '@/components/ui/SvgDefs';
 
 type Props = {
@@ -43,6 +44,7 @@ export default function SiteShell({ children, currentUser }: Props) {
         </div>
       </div>
       <SvgDefs />
+      <AuthSessionSync hasSession={Boolean(currentUser)} />
       {!landing && <GlobalMotion />}
     </div>
   );

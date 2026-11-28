@@ -40,7 +40,7 @@ export default async function OrganizerEventsPage() {
     initialEvents = await getOrganizerNoticeboardEvents();
   } catch (error) {
     console.error('Unable to load organizer event listings.', error);
-    loadError = 'Event listings could not be loaded. Check the Supabase configuration and apply the Noticeboard event migration.';
+    loadError = 'Event listings could not be loaded. Please ensure your database is active.';
   }
 
   return (

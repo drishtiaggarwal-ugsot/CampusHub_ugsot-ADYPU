@@ -204,24 +204,18 @@ export default function ProjectList({ initialProjects, currentUser }: Props) {
         </div>
 
         {/* Tech Stack Filters */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, marginRight: 4 }}>Tech Stack:</span>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, marginRight: 4, color: 'var(--ink)' }}>Tech Stack:</span>
           {COMMON_TECH.map((t) => {
-            const on = selectedTech === t;
+            const on = selectedTech.toLowerCase() === t.toLowerCase();
             return (
               <button
                 key={t}
                 type="button"
-                className="chip"
+                className={`filter-pill ${on ? 'is-active' : ''}`}
+                data-active={on}
                 onClick={() => setSelectedTech(t)}
-                style={{
-                  background: on ? 'var(--ink)' : 'var(--card)',
-                  color: on ? '#ffffff' : 'var(--ink)',
-                  border: '1.5px solid var(--ink)',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  padding: '3px 10px',
-                }}
+                aria-pressed={on}
               >
                 {t}
               </button>

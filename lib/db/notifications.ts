@@ -1,5 +1,5 @@
 import 'server-only';
-import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase/server';
+import { createDbClient, isFirestoreConfigured } from '@/lib/db/client';
 import { getCurrentUser } from '@/lib/auth';
 import type { AppNotification, NotificationPreferences, NotificationType } from '@/lib/types';
 
@@ -7,12 +7,12 @@ import type { AppNotification, NotificationPreferences, NotificationType } from 
  * Fetch the notifications for the current signed-in user.
  */
 export async function getMyNotifications(limit = 40): Promise<AppNotification[]> {
-  if (!isSupabaseConfigured()) return [];
+  if (!(await isFirestoreConfigured())) return [];
   const currentUser = await getCurrentUser();
   if (!currentUser) return [];
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { data, error } = await supabase
       .from('notifications')
       .select('id, user_id, type, title, message, link, is_read, created_at')
@@ -41,12 +41,12 @@ export async function getMyNotifications(limit = 40): Promise<AppNotification[]>
  * Get count of unread notifications for current user.
  */
 export async function getUnreadNotificationCount(): Promise<number> {
-  if (!isSupabaseConfigured()) return 0;
+  if (!(await isFirestoreConfigured())) return 0;
   const currentUser = await getCurrentUser();
   if (!currentUser) return 0;
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { count, error } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
@@ -64,12 +64,12 @@ export async function getUnreadNotificationCount(): Promise<number> {
  * Mark a single notification as read.
  */
 export async function markNotificationRead(notificationId: string): Promise<boolean> {
-  if (!isSupabaseConfigured() || !notificationId) return false;
+  if (!(await isFirestoreConfigured()) || !notificationId) return false;
   const currentUser = await getCurrentUser();
   if (!currentUser) return false;
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
@@ -86,12 +86,12 @@ export async function markNotificationRead(notificationId: string): Promise<bool
  * Mark all notifications for current user as read.
  */
 export async function markAllNotificationsRead(): Promise<boolean> {
-  if (!isSupabaseConfigured()) return false;
+  if (!(await isFirestoreConfigured())) return false;
   const currentUser = await getCurrentUser();
   if (!currentUser) return false;
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
@@ -132,10 +132,10 @@ export async function createNotification(
   const message = isObj ? userIdOrOptions.message : messageParam!;
   const link = isObj ? (userIdOrOptions.linkUrl ?? userIdOrOptions.link ?? null) : (linkParam ?? null);
 
-  if (!isSupabaseConfigured() || !userId) return false;
+  if (!(await isFirestoreConfigured()) || !userId) return false;
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
 
     // Check user preferences if available
     const { data: prefs } = await supabase
@@ -192,13 +192,13 @@ export async function getNotificationPreferences(): Promise<NotificationPreferen
     notifyProjects: true,
   };
 
-  if (!isSupabaseConfigured()) return defaultPrefs;
+  if (!(await isFirestoreConfigured())) return defaultPrefs;
   const currentUser = await getCurrentUser();
   if (!currentUser) return defaultPrefs;
   defaultPrefs.userId = currentUser.id;
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { data, error } = await supabase
       .from('notification_preferences')
       .select('*')
@@ -227,12 +227,12 @@ export async function getNotificationPreferences(): Promise<NotificationPreferen
 export async function updateNotificationPreferences(
   prefs: Partial<NotificationPreferences>
 ): Promise<boolean> {
-  if (!isSupabaseConfigured()) return false;
+  if (!(await isFirestoreConfigured())) return false;
   const currentUser = await getCurrentUser();
   if (!currentUser) return false;
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const payload = {
       user_id: currentUser.id,
       ...(prefs.emailNotifications !== undefined ? { email_notifications: prefs.emailNotifications } : {}),
@@ -268,7 +268,7 @@ async function sendOptionalEmailNotification(
   if (!apiKey) return;
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { data: profile } = await supabase
       .from('profiles')
       .select('email, full_name')

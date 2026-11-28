@@ -1,5 +1,5 @@
 import 'server-only';
-import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase/server';
+import { createDbClient, isFirestoreConfigured } from '@/lib/db/client';
 import { getCurrentUser } from '@/lib/auth';
 import { createNotification } from './notifications';
 import type { ReportItem, ReportItemType, ReportStatus, ModerationLog } from '@/lib/types';
@@ -8,12 +8,12 @@ import type { ReportItem, ReportItemType, ReportStatus, ModerationLog } from '@/
  * Fetch all reports (Organizers only).
  */
 export async function getReports(statusFilter?: ReportStatus): Promise<ReportItem[]> {
-  if (!isSupabaseConfigured()) return [];
+  if (!(await isFirestoreConfigured())) return [];
   const currentUser = await getCurrentUser();
   if (!currentUser || currentUser.role !== 'organizer') return [];
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     let query = supabase
       .from('reports')
       .select('id, reporter_id, item_type, item_id, reason, details, status, moderator_id, resolution_notes, created_at, resolved_at')
@@ -27,19 +27,59 @@ export async function getReports(statusFilter?: ReportStatus): Promise<ReportIte
     const { data, error } = await query;
     if (error || !data) return [];
 
-    return data.map((r) => ({
-      id: r.id,
-      reporterId: r.reporter_id,
-      itemType: r.item_type,
-      itemId: r.item_id,
-      reason: r.reason,
-      details: r.details,
-      status: r.status as ReportStatus,
-      moderatorId: r.moderator_id,
-      resolutionNotes: r.resolution_notes,
-      createdAt: r.created_at,
-      resolvedAt: r.resolved_at,
-    }));
+    // Resolve reported content authors cleanly so Moderation Desk never targets reporters
+    const postIds = [...new Set(data.filter((r) => r.item_type === 'forum_post').map((r) => r.item_id))];
+    const answerIds = [...new Set(data.filter((r) => r.item_type === 'forum_answer').map((r) => r.item_id))];
+    const projectIds = [...new Set(data.filter((r) => r.item_type === 'project').map((r) => r.item_id))];
+    const commentIds = [...new Set(data.filter((r) => r.item_type === 'project_comment').map((r) => r.item_id))];
+
+    const [postsRes, answersRes, projectsRes, commentsRes] = await Promise.all([
+      postIds.length ? supabase.from('forum_posts').select('id, author_id, title').in('id', postIds) : Promise.resolve({ data: [] }),
+      answerIds.length ? supabase.from('forum_answers').select('id, author_id').in('id', answerIds) : Promise.resolve({ data: [] }),
+      projectIds.length ? supabase.from('projects').select('id, owner_id, title').in('id', projectIds) : Promise.resolve({ data: [] }),
+      commentIds.length ? supabase.from('project_comments').select('id, user_id').in('id', commentIds) : Promise.resolve({ data: [] }),
+    ]);
+
+    const postMap = new Map((postsRes.data ?? []).map((p) => [p.id, p]));
+    const answerMap = new Map((answersRes.data ?? []).map((a) => [a.id, a]));
+    const projectMap = new Map((projectsRes.data ?? []).map((p) => [p.id, p]));
+    const commentMap = new Map((commentsRes.data ?? []).map((c) => [c.id, c]));
+
+    return data.map((r) => {
+      let targetAuthorId: string | undefined;
+      let itemTitle: string | undefined;
+      if (r.item_type === 'user') {
+        targetAuthorId = r.item_id;
+      } else if (r.item_type === 'forum_post') {
+        const p = postMap.get(r.item_id);
+        targetAuthorId = p?.author_id;
+        itemTitle = p?.title;
+      } else if (r.item_type === 'forum_answer') {
+        targetAuthorId = answerMap.get(r.item_id)?.author_id;
+      } else if (r.item_type === 'project') {
+        const p = projectMap.get(r.item_id);
+        targetAuthorId = p?.owner_id;
+        itemTitle = p?.title;
+      } else if (r.item_type === 'project_comment') {
+        targetAuthorId = commentMap.get(r.item_id)?.user_id;
+      }
+
+      return {
+        id: r.id,
+        reporterId: r.reporter_id,
+        targetAuthorId,
+        itemType: r.item_type,
+        itemId: r.item_id,
+        itemTitle,
+        reason: r.reason,
+        details: r.details,
+        status: r.status as ReportStatus,
+        moderatorId: r.moderator_id,
+        resolutionNotes: r.resolution_notes,
+        createdAt: r.created_at,
+        resolvedAt: r.resolved_at,
+      };
+    });
   } catch {
     return [];
   }
@@ -54,7 +94,7 @@ export async function submitReport(
   reason: string,
   details?: string
 ): Promise<{ success: boolean; error?: string }> {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Database not configured.' };
+  if (!(await isFirestoreConfigured())) return { success: false, error: 'Database not configured.' };
   const currentUser = await getCurrentUser();
   if (!currentUser) return { success: false, error: 'You must be signed in to submit a report.' };
 
@@ -63,7 +103,7 @@ export async function submitReport(
   if (!cleanReason) return { success: false, error: 'Please select a reason for reporting.' };
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { error } = await supabase.from('reports').insert({
       reporter_id: currentUser.id,
       item_type: itemType,
@@ -89,14 +129,14 @@ export async function resolveReport(
   action: 'dismiss' | 'action_taken',
   resolutionNotes?: string
 ): Promise<{ success: boolean; error?: string }> {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Database not configured.' };
+  if (!(await isFirestoreConfigured())) return { success: false, error: 'Database not configured.' };
   const currentUser = await getCurrentUser();
   if (!currentUser || currentUser.role !== 'organizer') {
     return { success: false, error: 'Unauthorized: Organizers only.' };
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const newStatus: ReportStatus = action === 'dismiss' ? 'dismissed' : 'action_taken';
 
     // Get report details to notify reporter
@@ -147,7 +187,7 @@ export async function toggleContentHidden(
   contentId: string,
   isHidden: boolean
 ): Promise<{ success: boolean; error?: string }> {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Database not configured.' };
+  if (!(await isFirestoreConfigured())) return { success: false, error: 'Database not configured.' };
   const currentUser = await getCurrentUser();
   if (!currentUser || currentUser.role !== 'organizer') {
     return { success: false, error: 'Unauthorized: Organizers only.' };
@@ -163,7 +203,7 @@ export async function toggleContentHidden(
   const tableName = tableMap[contentType];
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { error } = await supabase
       .from(tableName)
       .update({ is_hidden: isHidden })
@@ -193,14 +233,14 @@ export async function warnUser(
   targetUserId: string,
   reason: string
 ): Promise<{ success: boolean; error?: string }> {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Database not configured.' };
+  if (!(await isFirestoreConfigured())) return { success: false, error: 'Database not configured.' };
   const currentUser = await getCurrentUser();
   if (!currentUser || currentUser.role !== 'organizer') {
     return { success: false, error: 'Unauthorized: Organizers only.' };
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { data: profile } = await supabase
       .from('profiles')
       .select('warning_count')
@@ -240,14 +280,14 @@ export async function toggleUserSuspension(
   isSuspended: boolean,
   reason?: string
 ): Promise<{ success: boolean; error?: string }> {
-  if (!isSupabaseConfigured()) return { success: false, error: 'Database not configured.' };
+  if (!(await isFirestoreConfigured())) return { success: false, error: 'Database not configured.' };
   const currentUser = await getCurrentUser();
   if (!currentUser || currentUser.role !== 'organizer') {
     return { success: false, error: 'Unauthorized: Organizers only.' };
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { error } = await supabase
       .from('profiles')
       .update({
@@ -288,12 +328,12 @@ export async function toggleUserSuspension(
  * Fetch moderation audit logs (Organizers only).
  */
 export async function getModerationLogs(limit = 50): Promise<ModerationLog[]> {
-  if (!isSupabaseConfigured()) return [];
+  if (!(await isFirestoreConfigured())) return [];
   const currentUser = await getCurrentUser();
   if (!currentUser || currentUser.role !== 'organizer') return [];
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     const { data, error } = await supabase
       .from('moderation_logs')
       .select('id, moderator_id, action, target_type, target_id, details, created_at')
@@ -323,10 +363,10 @@ export async function checkUserPostingEligibility(
   userId: string,
   bodyText = ''
 ): Promise<{ allowed: boolean; reason?: string }> {
-  if (!isSupabaseConfigured() || !userId) return { allowed: true };
+  if (!(await isFirestoreConfigured()) || !userId) return { allowed: true };
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
 
     // 1. Check account suspension & created_at
     const { data: profile } = await supabase
@@ -389,7 +429,7 @@ async function logModerationAction(
   details?: string | null
 ): Promise<void> {
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
     await supabase.from('moderation_logs').insert({
       moderator_id: moderatorId,
       action,

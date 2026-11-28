@@ -2,18 +2,18 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { signOutClient } from '@/lib/auth-client';
 
 export default function SignOutButton() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  async function signOut() {
+  async function handleSignOut() {
     setSubmitting(true);
     setError('');
     try {
-      const response = await fetch('/api/auth/sign-out', { method: 'POST' });
-      if (!response.ok) throw new Error('Sign out failed');
+      await signOutClient();
       router.replace('/');
       router.refresh();
     } catch {
@@ -24,7 +24,7 @@ export default function SignOutButton() {
 
   return (
     <div className="auth-signout">
-      <button type="button" className="btn btn--outline" onClick={signOut} disabled={submitting}>
+      <button type="button" className="btn btn--outline" onClick={handleSignOut} disabled={submitting}>
         {submitting ? 'Signing out…' : 'Sign out'}
       </button>
       {error && <span role="alert" className="form-error">{error}</span>}

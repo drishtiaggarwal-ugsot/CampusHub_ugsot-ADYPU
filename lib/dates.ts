@@ -55,7 +55,7 @@ export function formatWeekday(iso: string): string {
 }
 
 /** "14" or "14–15" */
-export function dayRange(e: CampusEvent): string {
+export function dayRange(e: Pick<CampusEvent, 'start' | 'end'>): string {
   const s = parseDate(e.start);
   if (!e.end || e.end === e.start) return String(s.getDate());
   return `${s.getDate()}–${parseDate(e.end).getDate()}`;

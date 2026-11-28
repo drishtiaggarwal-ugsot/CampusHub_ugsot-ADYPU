@@ -149,10 +149,13 @@ export default async function CertificatePage({ params }: Props) {
 
           <div>
             <div style={{ fontSize: 11, textTransform: 'uppercase', fontWeight: 800, color: '#6b7280' }}>
-              Certificate ID
+              Certificate No.
             </div>
-            <div style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, marginTop: 2 }}>
-              {cert.certificateId}
+            <div style={{ fontSize: 14, fontFamily: 'monospace', fontWeight: 800, marginTop: 2, color: '#111827' }}>
+              {cert.certificateNumber || cert.certificateId.slice(0, 8).toUpperCase()}
+            </div>
+            <div style={{ fontSize: 10, fontFamily: 'monospace', opacity: 0.6, marginTop: 2 }}>
+              ID: {cert.certificateId}
             </div>
           </div>
 

@@ -20,6 +20,7 @@ export type Database = {
           place: string;
           start_date: string | null;
           end_date: string | null;
+          image_url: string | null;
           noticeboard_managed: boolean;
           is_published: boolean;
           noticeboard_updated_at: string;
@@ -42,6 +43,7 @@ export type Database = {
           place?: string;
           start_date?: string | null;
           end_date?: string | null;
+          image_url?: string | null;
           noticeboard_managed?: boolean;
           is_published?: boolean;
           noticeboard_updated_at?: string;
@@ -60,6 +62,7 @@ export type Database = {
           skills: string[] | null;
           bio: string | null;
           is_hidden_from_leaderboard: boolean;
+          looking_for_team?: boolean;
           interests: string[];
           goals: string[];
           onboarding_completed: boolean;
@@ -143,6 +146,44 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['event_teams']['Insert']>;
         Relationships: [];
       };
+      team_invitations: {
+        Row: {
+          id: string;
+          team_id: string | null;
+          team_name: string;
+          event_id: string | null;
+          event_title: string | null;
+          sender_id: string;
+          sender_name: string;
+          sender_email: string;
+          receiver_id: string;
+          receiver_name: string;
+          receiver_email: string;
+          message: string;
+          status: 'pending' | 'accepted' | 'declined';
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          team_id?: string | null;
+          team_name: string;
+          event_id?: string | null;
+          event_title?: string | null;
+          sender_id: string;
+          sender_name: string;
+          sender_email: string;
+          receiver_id: string;
+          receiver_name: string;
+          receiver_email: string;
+          message?: string;
+          status?: 'pending' | 'accepted' | 'declined';
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['team_invitations']['Insert']>;
+        Relationships: [];
+      };
       event_team_members: {
         Row: {
           id: string;
@@ -150,10 +191,17 @@ export type Database = {
           team_id: string;
           member_email: string;
           email_key: string;
+          invite_id?: string | null;
           created_at: string;
         };
         Insert: {
-          id?: string; event_id: string; team_id: string; member_email: string; created_at?: string;
+          id?: string;
+          event_id: string;
+          team_id: string;
+          member_email: string;
+          email_key?: string;
+          invite_id?: string | null;
+          created_at?: string;
         };
         Update: Partial<Database['public']['Tables']['event_team_members']['Insert']>;
         Relationships: [];
@@ -170,9 +218,9 @@ export type Database = {
       };
       event_certificates: {
         Row: {
-          id: string; event_id: string; user_id: string; issued_at: string;
+          id: string; event_id: string; user_id: string; issued_at: string; certificate_number?: string;
         };
-        Insert: { id?: string; event_id: string; user_id: string; issued_at?: string };
+        Insert: { id?: string; event_id: string; user_id: string; issued_at?: string; certificate_number?: string };
         Update: Partial<Database['public']['Tables']['event_certificates']['Insert']>;
         Relationships: [];
       };

@@ -1,6 +1,6 @@
 import 'server-only';
-import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase/server';
-import { events as localEvents, students as localStudents } from '@/lib/data';
+import { createDbClient, isFirestoreConfigured } from '@/lib/db/client';
+import { getPublishedNoticeboardEvents } from './noticeboard-events';
 import type { GlobalSearchResults } from '@/lib/types';
 
 /**
@@ -21,49 +21,51 @@ export async function performGlobalSearch(rawQuery: string): Promise<GlobalSearc
 
   if (query.length < 2) return emptyResult;
 
-  // Search local events first
-  const matchedEvents = localEvents
-    .filter(
-      (e) =>
-        e.title.toLowerCase().includes(query) ||
-        e.category.toLowerCase().includes(query) ||
-        e.place.toLowerCase().includes(query) ||
-        ('theme' in e && e.theme?.toLowerCase().includes(query))
-    )
-    .slice(0, 5)
-    .map((e) => ({
-      id: e.id,
-      title: e.title,
-      category: e.category,
-      start: e.start,
-      where: e.where,
-    }));
+  // Search published events from Firestore catalog
+  let matchedEvents: Array<{
+    id: string;
+    title: string;
+    category: string;
+    start: string;
+    where: string;
+  }> = [];
 
-  if (!isSupabaseConfigured()) {
-    // Fallback to local students if Supabase is unconfigured
-    const matchedStudents = localStudents
-      .filter((s) => s.name.toLowerCase().includes(query) || s.skills.some((sk) => sk.toLowerCase().includes(query)))
+  try {
+    const published = await getPublishedNoticeboardEvents();
+    matchedEvents = published
+      .filter(
+        (e) =>
+          e.title.toLowerCase().includes(query) ||
+          e.category.toLowerCase().includes(query) ||
+          e.place.toLowerCase().includes(query) ||
+          ('theme' in e && typeof e.theme === 'string' && e.theme.toLowerCase().includes(query))
+      )
       .slice(0, 5)
-      .map((s) => ({
-        id: s.id,
-        name: s.name,
-        courseYear: s.year,
-        skills: s.skills,
+      .map((e) => ({
+        id: e.id,
+        title: e.title,
+        category: e.category,
+        start: e.start,
+        where: e.where,
       }));
+  } catch {
+    matchedEvents = [];
+  }
 
+  if (!(await isFirestoreConfigured())) {
     return {
       query: rawQuery,
-      totalCount: matchedEvents.length + matchedStudents.length,
+      totalCount: matchedEvents.length,
       events: matchedEvents,
       projects: [],
       forum: [],
       opportunities: [],
-      students: matchedStudents,
+      students: [],
     };
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createDbClient();
 
     // 1. Projects search
     const { data: dbProjects } = await supabase

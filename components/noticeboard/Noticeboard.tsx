@@ -18,7 +18,7 @@ export default async function Noticeboard() {
   return (
     <main className={styles.board}>
       <header className={styles.topBar}>
-        <Link href="/welcome" className={styles.wordmark} aria-label="CampusHub home">
+        <Link href="/" className={styles.wordmark} aria-label="CampusHub home">
           <span className={styles.wordmarkMark} aria-hidden="true">U</span>
           <span>
             <strong>CampusHub</strong>

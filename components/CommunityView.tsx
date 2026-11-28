@@ -10,7 +10,6 @@ import {
   type CommunityPostType,
 } from '@/lib/types';
 import Card from './ui/Card';
-import Tag from './ui/Tag';
 import { timeAgo } from '@/lib/dates';
 import { ArrowUp, Bubble } from './icons';
 
@@ -52,12 +51,17 @@ export default function CommunityView({ initialPosts, currentUser }: Props) {
   const filteredPosts = useMemo(() => {
     return posts.filter((post) => {
       if (post.type !== activeTab) return false;
-      if (selectedTag !== 'All' && !post.tags.includes(selectedTag)) return false;
+      if (
+        selectedTag !== 'All' &&
+        !post.tags?.some((t) => t.toLowerCase() === selectedTag.toLowerCase())
+      ) {
+        return false;
+      }
       if (search.trim()) {
         const query = search.trim().toLowerCase();
-        const matchesTitle = post.title.toLowerCase().includes(query);
-        const matchesContent = post.content.toLowerCase().includes(query);
-        const matchesTag = post.tags.some((t) => t.toLowerCase().includes(query));
+        const matchesTitle = post.title?.toLowerCase().includes(query);
+        const matchesContent = post.content?.toLowerCase().includes(query);
+        const matchesTag = post.tags?.some((t) => t.toLowerCase().includes(query));
         if (!matchesTitle && !matchesContent && !matchesTag) return false;
       }
       return true;
@@ -134,6 +138,7 @@ export default function CommunityView({ initialPosts, currentUser }: Props) {
       setPosts((prev) => [newPost, ...prev]);
       setDraftTitle('');
       setDraftContent('');
+      setSelectedTag('All');
       setShowComposer(false);
     } catch (err) {
       setComposerError(err instanceof Error ? err.message : 'Unable to create post.');
@@ -303,10 +308,11 @@ export default function CommunityView({ initialPosts, currentUser }: Props) {
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',
-          border: '2px solid var(--ink)',
-          borderRadius: 'var(--radius)',
-          overflow: 'hidden',
-          background: 'var(--bg)',
+          border: '1px solid var(--border)',
+          borderRadius: 12,
+          padding: 4,
+          background: 'var(--panel)',
+          gap: 4,
         }}
       >
         {TABS.map((tab) => {
@@ -322,14 +328,15 @@ export default function CommunityView({ initialPosts, currentUser }: Props) {
                 setShowComposer(false);
               }}
               style={{
-                padding: '12px 16px',
-                fontWeight: 800,
-                fontSize: 15,
+                padding: '10px 16px',
+                fontWeight: active ? 700 : 500,
+                fontSize: 14,
+                borderRadius: 8,
                 border: 'none',
-                background: active ? 'var(--highlight, #ffd166)' : 'transparent',
-                color: 'var(--ink)',
+                background: active ? 'var(--ink)' : 'transparent',
+                color: active ? 'var(--canvas)' : 'var(--ink)',
                 cursor: 'pointer',
-                transition: 'background 150ms ease',
+                transition: 'all 120ms ease',
               }}
             >
               {tab.label}
@@ -342,7 +349,7 @@ export default function CommunityView({ initialPosts, currentUser }: Props) {
       <div
         className="card"
         style={{
-          padding: 16,
+          padding: 18,
           display: 'flex',
           flexDirection: 'column',
           gap: 14,
@@ -384,24 +391,18 @@ export default function CommunityView({ initialPosts, currentUser }: Props) {
         </div>
 
         {/* Tags filter row */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, marginRight: 4 }}>Tags:</span>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, marginRight: 4, color: 'var(--ink)' }}>Tags:</span>
           {['All', ...COMMUNITY_TAGS].map((t) => {
-            const on = selectedTag === t;
+            const on = selectedTag.toLowerCase() === t.toLowerCase();
             return (
               <button
                 key={t}
                 type="button"
-                className="chip"
+                className={`filter-pill ${on ? 'is-active' : ''}`}
+                data-active={on}
                 onClick={() => setSelectedTag(t)}
-                style={{
-                  background: on ? 'var(--ink)' : 'var(--card)',
-                  color: on ? '#ffffff' : 'var(--ink)',
-                  border: '1.5px solid var(--ink)',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  padding: '3px 10px',
-                }}
+                aria-pressed={on}
               >
                 {t}
               </button>
@@ -424,7 +425,7 @@ export default function CommunityView({ initialPosts, currentUser }: Props) {
               id="post-title"
               type="text"
               className="input"
-              placeholder={activeTab === 'question' ? 'e.g. How do I configure Supabase Auth with SSR?' : 'Title of your post'}
+              placeholder={activeTab === 'question' ? 'e.g. How do I structure Next.js 16 Server vs Client components?' : 'Title of your post'}
               value={draftTitle}
               onChange={(e) => setDraftTitle(e.target.value)}
               required
@@ -446,23 +447,16 @@ export default function CommunityView({ initialPosts, currentUser }: Props) {
 
           <div>
             <label className="field__label">Select Tags</label>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {COMMUNITY_TAGS.map((tag) => {
-                const selected = draftTags.includes(tag);
+                const selected = draftTags.some((t) => t.toLowerCase() === tag.toLowerCase());
                 return (
                   <button
                     key={tag}
                     type="button"
-                    className="chip"
+                    className={`filter-pill ${selected ? 'is-active' : ''}`}
+                    data-active={selected}
                     onClick={() => toggleTagInComposer(tag)}
-                    style={{
-                      background: selected ? 'var(--accent, #2563eb)' : '#f3f4f6',
-                      color: selected ? '#ffffff' : '#1f2937',
-                      border: '1.5px solid var(--ink)',
-                      cursor: 'pointer',
-                      fontSize: 12,
-                      padding: '4px 10px',
-                    }}
                   >
                     {selected ? `✓ ${tag}` : tag}
                   </button>
@@ -493,9 +487,20 @@ export default function CommunityView({ initialPosts, currentUser }: Props) {
             <h3 style={{ margin: '0 0 6px 0' }}>No {activeTab}s found</h3>
             <p style={{ margin: 0, opacity: 0.8 }}>
               {search || selectedTag !== 'All'
-                ? 'Try clearing the search or choosing another tag filter.'
+                ? `No ${activeTab}s matching "${selectedTag}"${search ? ` and search "${search}"` : ''}.`
                 : `Be the first to start a ${activeTab} in this category!`}
             </p>
+            {selectedTag !== 'All' && (
+              <div style={{ marginTop: 12 }}>
+                <button
+                  type="button"
+                  className="btn btn--outline"
+                  onClick={() => setSelectedTag('All')}
+                >
+                  Show all tags
+                </button>
+              </div>
+            )}
           </Card>
         ) : (
           filteredPosts.map((post) => {
@@ -512,16 +517,28 @@ export default function CommunityView({ initialPosts, currentUser }: Props) {
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 12,
-                  border: post.acceptedAnswerId ? '2.5px solid #16a34a' : '2px solid var(--ink)',
+                  border: post.acceptedAnswerId ? '2px solid #16a34a' : '1px solid var(--border)',
                   background: 'var(--card)',
                 }}
               >
                 {/* Top Meta */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <Tag className="chip" style={{ background: '#fef08a', color: '#854d0e', textTransform: 'uppercase', fontSize: 11 }}>
+                    <span
+                      style={{
+                        background: 'var(--panel)',
+                        color: 'var(--ink)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        padding: '2px 8px',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                      }}
+                    >
                       {post.type}
-                    </Tag>
+                    </span>
                     {post.acceptedAnswerId && (
                       <span
                         style={{
@@ -567,7 +584,17 @@ export default function CommunityView({ initialPosts, currentUser }: Props) {
                 </div>
 
                 {/* Title & Body */}
-                <h2 style={{ margin: '4px 0 0', fontSize: 'clamp(18px, 3.5vw, 22px)', fontWeight: 700 }}>
+                <h2
+                  onClick={() => handleToggleExpand(post.id)}
+                  style={{
+                    margin: '4px 0 0',
+                    fontSize: 'clamp(18px, 3.5vw, 21px)',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    lineHeight: 1.3,
+                  }}
+                  title="Click to toggle conversation replies"
+                >
                   {post.title}
                 </h2>
                 <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
@@ -578,9 +605,24 @@ export default function CommunityView({ initialPosts, currentUser }: Props) {
                 {post.tags.length > 0 && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {post.tags.map((t) => (
-                      <span key={t} className="chip chip--neutral" style={{ fontSize: 11, padding: '2px 8px' }}>
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setSelectedTag(t)}
+                        style={{
+                          fontSize: 12,
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                          background: 'var(--panel)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--ink)',
+                          cursor: 'pointer',
+                          fontWeight: 500,
+                        }}
+                        title={`Filter by #${t}`}
+                      >
                         #{t}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 )}

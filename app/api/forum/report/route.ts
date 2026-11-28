@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { reportForumItem } from '@/lib/db/community';
 
 export async function POST(request: Request) {
@@ -9,22 +10,23 @@ export async function POST(request: Request) {
     }
 
     const { itemType, itemId, reason } = body as {
-      itemType: 'post' | 'answer';
-      itemId: string;
-      reason?: string;
+      itemType?: unknown;
+      itemId?: unknown;
+      reason?: unknown;
     };
 
-    if (!['post', 'answer'].includes(itemType) || !itemId) {
+    if (
+      (itemType !== 'post' && itemType !== 'answer') ||
+      typeof itemId !== 'string' ||
+      !itemId.trim()
+    ) {
       return NextResponse.json({ error: 'itemType and itemId are required' }, { status: 400 });
     }
 
-    await reportForumItem(itemType, itemId, reason);
+    await reportForumItem(itemType, itemId, typeof reason === 'string' ? reason : undefined);
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('Error reporting item:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to report item' },
-      { status: 500 },
-    );
+    return apiErrorResponse(err, 'Failed to report item');
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { updateSessionStatus } from '@/lib/db/mentorship';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -17,9 +18,6 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('Error updating session status:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to update session' },
-      { status: 403 },
-    );
+    return apiErrorResponse(err, 'Failed to update session');
   }
 }

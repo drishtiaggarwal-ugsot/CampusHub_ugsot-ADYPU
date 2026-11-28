@@ -56,7 +56,8 @@ export default function IntroScreen({ signedIn = false }: { signedIn?: boolean }
 
   useLayoutEffect(() => {
     const app = document.getElementById('app-content');
-    const showIntro = pathname === '/intro' || (!signedIn && pathname !== '/welcome' && open);
+    const isIntroRoute = pathname === '/intro';
+    const showIntro = isIntroRoute;
     if (!showIntro) {
       app?.removeAttribute('aria-hidden');
       if (app) app.inert = false;
@@ -109,7 +110,7 @@ export default function IntroScreen({ signedIn = false }: { signedIn?: boolean }
   }, [close, open, pathname, signedIn]);
 
   const isIntroRoute = pathname === '/intro';
-  const showIntro = isIntroRoute || (!signedIn && pathname !== '/welcome' && open);
+  const showIntro = isIntroRoute;
   if (!showIntro) return null;
 
   const classNames = [

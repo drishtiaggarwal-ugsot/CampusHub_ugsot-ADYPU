@@ -21,7 +21,7 @@ export default function SiteShell({ children, currentUser }: Props) {
     || pathname === '/intro'
     || pathname === '/onboarding'
     || pathname === '/noticeboard';
-  const landing = pathname === '/welcome';
+  const landing = pathname === '/welcome' || (pathname === '/' && !currentUser);
   const showAppShell = !immersive && !landing;
 
   return (

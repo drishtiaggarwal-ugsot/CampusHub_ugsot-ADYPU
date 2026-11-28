@@ -10,14 +10,16 @@ import FeatureSuggestions from '@/components/FeatureSuggestions';
 import { getEventRegistrationStatuses, type EventRegistrationStatus } from '@/lib/db/events';
 import { getCommunityPosts } from '@/lib/db/community';
 import { getPublishedNoticeboardEvents } from '@/lib/db/noticeboard-events';
-import { redirect } from 'next/navigation';
+import WelcomeExperience from '@/components/landing/WelcomeExperience';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Home · CampusHub · UGSOT' };
 
 export default async function HomePage() {
   const currentUser = await getCurrentUser();
-  if (!currentUser) redirect('/welcome');
+  if (!currentUser) {
+    return <WelcomeExperience currentUser={null} />;
+  }
 
   const events = await getPublishedNoticeboardEvents().catch(() => []);
 
